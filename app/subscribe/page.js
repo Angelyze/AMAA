@@ -1,118 +1,162 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import { useSession, signIn } from "next-auth/react";
+import { useAuth } from "../providers";
 import { useRouter } from "next/navigation";
 import "../globals.css";
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-
 export default function Subscribe() {
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
-  const [email, setEmail] = useState("");
+  const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  const [showEmailForm, setShowEmailForm] = useState(false);
 
   useEffect(() => {
-    // Check URL parameters for success and email
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("success") === "true") {
-      setPaymentCompleted(true);
-      const emailParam = urlParams.get("email");
-      if (emailParam) {
-        setEmail(decodeURIComponent(emailParam));
-      }
-    }
-    
-    // If user is already premium, redirect to home
-    if (session?.user?.isPremium) {
-      router.push("/");
-    }
-  }, [session, router]);
+    // Remove dark theme if it's applied
+    document.documentElement.classList.remove('dark-theme');
+  }, []);
 
   const handleSubscribe = async () => {
     setLoading(true);
+    setError('');
     
     try {
-      const response = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          email: session?.user?.email || email || "",
-          returnUrl: window.location.origin + "/subscribe?success=true&email=" + 
-            encodeURIComponent(session?.user?.email || email || "")
-        }),
-      });
-
-      const { id: sessionId } = await response.json();
-      const stripe = await stripePromise;
-      await stripe.redirectToCheckout({ sessionId });
+      // If user is already logged in and premium, just redirect to home
+      if (user?.isPremium) {
+        alert('You are already a premium user!');
+        router.push('/');
+        return;
+      }
+      
+      // If user is logged in, use their email
+      if (user) {
+        // Create Stripe checkout session with the logged-in user's email
+        await createCheckoutSession(user.email, user.uid || '');
+        return;
+      }
+      
+      // If not logged in and email form is showing, validate and proceed
+      if (showEmailForm) {
+        if (!email || !email.includes('@')) {
+          setError('Please enter a valid email address');
+          setLoading(false);
+          return;
+        }
+        
+        // Create checkout session with the provided email
+        await createCheckoutSession(email);
+        return;
+      }
+      
+      // If not logged in and email form is not showing, show the email form
+      setShowEmailForm(true);
+      setLoading(false);
     } catch (error) {
-      console.error("Error:", error);
-    } finally {
+      console.error('Error in subscription process:', error);
+      setError('Failed to process your request. Please try again.');
       setLoading(false);
     }
   };
 
-  const handleSignIn = (provider) => {
-    signIn(provider);
-  };
-
-  const handleEmailChange = (e) => {
-    setEmail(e.target.value);
+  const createCheckoutSession = async (email, uid = '') => {
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, uid }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.url) {
+        window.location.href = data.url; // Redirect to Stripe Checkout
+      } else {
+        throw new Error(data.error || 'Failed to create checkout session');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      setError('Failed to redirect to checkout. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
     <div className="container">
-      <div className="subscribe-container">
-        <h2>Upgrade to AMAA Premium</h2>
-        <p>Enjoy ad-free answers and save your conversations for only $5/month.</p>
+      <div className="subscribe-container" style={{ maxWidth: '600px', margin: '50px auto', padding: '30px', textAlign: 'center' }}>
+        <img src="/AMAA.png" alt="AMAA Logo" style={{ width: '200px', marginBottom: '20px' }} />
+        <h2>Try AMAA Premium Free</h2>
+        <p>Get a 7-day free trial, then just $5/month for premium features.</p>
         
-        {paymentCompleted ? (
-          <div>
-            <h3>Payment Successful!</h3>
-            <p>Please sign in to access your premium account:</p>
-            <div className="auth-buttons">
-              <button onClick={() => handleSignIn("google")} className="auth-button">
-                Sign in with Google
-              </button>
-              <button onClick={() => handleSignIn("facebook")} className="auth-button">
-                Sign in with Facebook
-              </button>
-              <button onClick={() => handleSignIn("twitter")} className="auth-button">
-                Sign in with X
-              </button>
-            </div>
+        <div style={{ textAlign: 'left', margin: '20px 0', padding: '20px', background: '#f8f9fa', borderRadius: '8px' }}>
+          <h3 style={{ marginTop: 0 }}>Premium Features:</h3>
+          <ul>
+            <li>Save and manage your conversations</li>
+            <li>Multiple high-quality text-to-speech voices</li>
+            <li>Theme customization options</li>
+            <li>Priority support</li>
+          </ul>
+        </div>
+        
+        {error && <div className="error-message" style={{ color: 'red', margin: '10px 0' }}>{error}</div>}
+        
+        {showEmailForm && !user && (
+          <div style={{ margin: '20px 0' }}>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '4px',
+                border: '1px solid #ccc',
+                marginBottom: '10px',
+                fontSize: '16px'
+              }}
+              required
+            />
           </div>
-        ) : (
-          <>
-            {!session && (
-              <div className="email-input-container">
-                <p>Enter your email to continue:</p>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={handleEmailChange}
-                  placeholder="Your email address"
-                  className="email-input"
-                />
-              </div>
-            )}
-            <button 
-              onClick={handleSubscribe} 
-              disabled={loading || (!session && !email)} 
-              className="subscribe-btn"
-            >
-              {loading ? "Processing..." : "Subscribe Now"}
-            </button>
-          </>
         )}
         
-        <p className="back-link">
-          <a href="/">Back to Home</a>
-        </p>
+        <button 
+          className="subscribe-btn" 
+          onClick={handleSubscribe}
+          disabled={loading}
+          style={{ 
+            padding: '20px 40px',
+            fontSize: '16px', 
+            marginTop: '20px',
+            background: '#0097b2',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            opacity: loading ? 0.7 : 1
+          }}
+        >
+          {loading ? 'Processing...' : showEmailForm ? 'Subscribe Now' : 'Get Premium Access'}
+        </button>
+        
+        <div style={{ marginTop: '20px' }}>
+          {user ? (
+            <p>Signed in as {user.email}</p>
+          ) : (
+            <p>
+              Already have an account? <a href="/auth/signin" style={{ color: '#0097b2' }}>Sign in</a>
+            </p>
+          )}
+        </div>
+        
+        <div style={{ marginTop: '10px' }}>
+          <a href="/" style={{ color: '#0097b2', textDecoration: 'none' }}>
+            ← Back to Home
+          </a>
+        </div>
       </div>
     </div>
   );

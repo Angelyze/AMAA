@@ -1,0 +1,369 @@
+/* Small phones (up to 375px) */
+@media (max-width: 375px) {
+  /* Extra small screen styles */
+  .message-controls {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+  }
+  
+  .container {
+    padding: 5px;
+  }
+  
+  .search-input,
+  .search-input-sticky {
+    font-size: 14px;
+    padding-right: 50px;
+  }
+}
+
+/* Regular phones (up to 576px) */
+@media (max-width: 576px) {
+  /* Small screen styles */
+}
+
+/* Larger phones and small tablets (up to 768px) */
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+  
+  .header-right {
+    top: 10px;
+    right: 10px;
+  }
+  
+  /* .header-sticky {
+    height: 60px;
+    padding: 8px;
+  } */
+  
+  .sticky-content {
+    height: 60px;
+  }
+  
+  .below-top-bar-ad {
+    top: 120px;
+    font-size: var(--font-size-xs);
+  }
+  
+  .logo-sticky {
+    width: 70px;
+    margin-right: 10px;
+  }
+  
+  .search-container-sticky {
+    max-width: 90%;
+  }
+  
+  .search-input-sticky {
+    padding: 8px 60px 8px 15px;
+    font-size: var(--font-size-xs);
+  }
+  
+  .search-options-sticky {
+    right: 5px;
+  }
+  
+  .option-btn, 
+  .menu-button,
+  .back-to-top,
+  .delete-btn {
+    padding: 8px;
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .message-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .message-controls {
+    margin-top: 5px;
+    align-self: flex-end;
+    gap: 5px;
+  }
+  
+  .dropdown-item {
+    padding: 12px 10px;
+    min-height: 44px;
+  }
+  
+  .new-session-btn,
+  .subscribe-btn {
+    padding: 10px 15px;
+    min-height: 44px;
+  }
+  
+  .icon {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .back-to-top img {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .main-centered {
+    padding-top: 120px;
+    box-sizing: border-box;
+  }
+  
+  .fixed-layout {
+    min-height: 250px;
+  }
+  
+  .logo {
+    width: 240px;
+    margin-bottom: 10px;
+  }
+  
+  .search-container {
+    max-width: 90%;
+  }
+  
+  .search-input {
+    padding: 8px 60px 8px 15px;
+    font-size: var(--font-size-sm);
+  }
+  
+  .search-options {
+    right: 5px;
+  }
+  
+  .conversation {
+    margin-top: 20px;
+  }
+  
+  .message {
+    margin-bottom: 15px;
+  }
+  
+  .message-role {
+    font-size: var(--font-size-sm);
+  }
+  
+  .message-content {
+    padding-left: 10px;
+    line-height: 1.4;
+  }
+  
+  .message-paragraph {
+    margin: 10px 0;
+    line-height: 1.5;
+  }
+  
+  .message-list {
+    margin: 5px 0;
+    padding-left: 15px;
+  }
+  
+  .message-list-item {
+    margin: 3px 0;
+    line-height: 1.5;
+  }
+  
+  .saved-conversations {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  
+  .dropdown-wrapper {
+    width: 100%;
+    order: 1;
+    margin-bottom: 10px;
+  }
+  
+  .saved-conversations .new-session-btn {
+    flex: 1;
+    text-align: center;
+    min-width: 110px;
+  }
+  
+  .popup-content {
+    padding: 20px;
+    width: 90%;
+    max-width: 100%;
+  }
+  
+  .social-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .below-top-bar-ad,
+  .ad {
+    width: 95%;
+    max-width: 95%;
+  }
+  
+  .dropdown-header {
+    padding: 8px;
+    font-size: var(--font-size-xs);
+    background-size: 10px;
+  }
+  
+  .delete-icon {
+    width: 10px;
+    height: 10px;
+  }
+  
+  .premium-pitch {
+    font-size: var(--font-size-xs);
+  }
+  
+  .footer-content {
+    padding: 10px 0;
+  }
+  
+  .footer-links {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  
+  .footer-links a {
+    margin: 0 8px 8px 0;
+    white-space: nowrap;
+  }
+  
+  /* Improve code block readability */
+  .code-block {
+    padding: 10px;
+    font-size: 12px;
+    overflow-x: auto;
+    white-space: pre;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Ensure formatted answers are readable */
+  .formatted-answer {
+    font-size: 14px;
+  }
+  
+  .formatted-answer code {
+    font-size: 12px;
+    word-break: break-word;
+  }
+  
+  /* Make lists more compact */
+  .answer-list {
+    padding-left: 15px;
+  }
+  
+  /* Optimize user profile area */
+  .user-profile {
+    padding: 5px 8px;
+  }
+  
+  .profile-pic {
+    width: 28px;
+    height: 28px;
+    margin-right: 8px;
+    border-width: 1px;
+  }
+  
+  .user-name {
+    max-width: 100px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 14px;
+  }
+  
+  /* User menu positioning */
+  .user-menu {
+    right: -10px;
+    width: 140px;
+  }
+  
+  /* Make text sizing controls more usable */
+  .text-size-control span {
+    padding: 3px 5px; /* Larger touch target on mobile */
+  }
+  
+  /* Adjust copy link style */
+  .copy-link {
+    padding: 2px 5px;
+  }
+  
+  /* Fix notification positioning */
+  .copy-notification {
+    padding: 8px 12px;
+    font-size: 12px;
+    bottom: 10px;
+    right: 10px;
+  }
+  
+  /* Improve scrolling on mobile */
+  .dropdown-list {
+    max-height: 180px;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Fixed position elements adjustments */
+  /* .header-sticky.visible {
+    padding-top: env(safe-area-inset-top, 0); */ /* Handle notches */
+  /* } */
+  
+  /* Enhance scrolling */
+  body {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* For very small screens */
+  @media (max-width: 375px) {
+    .message-controls {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    
+    .copy-link {
+      margin-top: 5px;
+    }
+  }
+}
+
+/* Tablets and small laptops (up to 992px) */
+@media (max-width: 992px) {
+  /* Large screen styles */
+}
+
+/* Landscape mode optimizations for mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .main-centered {
+    padding-top: 30px;
+  }
+  
+  .fixed-layout {
+    min-height: 200px;
+  }
+  
+  .below-top-bar-ad {
+    top: 80px;
+  }
+  
+  /* More compact layout for landscape */
+  .logo {
+    width: 200px;
+    margin-bottom: 10px;
+  }
+  
+  /* Adjust saved conversations section for landscape */
+  .saved-conversations {
+    flex-wrap: nowrap;
+  }
+  
+  .dropdown-wrapper {
+    width: 40%;
+    margin-bottom: 0;
+  }
+} 

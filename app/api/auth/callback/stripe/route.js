@@ -1,51 +1,105 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
-import { get, set } from '@vercel/edge-config';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-export async function POST(req) {
-  const payload = await req.text();
-  const signature = req.headers.get("stripe-signature");
-  
-  let event;
-  
+// Initialize Firebase Admin
+const initializeFirebaseAdmin = () => {
   try {
-    event = stripe.webhooks.constructEvent(payload, signature, endpointSecret);
-  } catch (err) {
-    console.error("Webhook signature verification failed:", err.message);
-    return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
-  }
-  
-  console.log("Received Stripe webhook event:", event.type);
-  
-  // Handle the event
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const userEmail = session.metadata.userEmail;
+    const apps = getApps();
     
-    console.log("Checkout completed for user:", userEmail);
-    
-    try {
-      // Get current premium users
-      const premiumUsers = await get('premium_users') || [];
+    if (apps.length === 0) {
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
       
-      // Add new premium user if not already in the list
-      if (!premiumUsers.includes(userEmail)) {
-        const updatedPremiumUsers = [...premiumUsers, userEmail];
-        
-        // Update Edge Config
-        await set('premium_users', updatedPremiumUsers);
-        
-        console.log(`User ${userEmail} upgraded to premium`);
-      } else {
-        console.log(`User ${userEmail} is already premium`);
+      const app = initializeApp({
+        credential: cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: privateKey
+        })
+      }, 'stripe-callback-app');
+      
+      return getFirestore(app);
+    } else {
+      return getFirestore();
+    }
+  } catch (error) {
+    console.error('Error initializing Firebase Admin:', error);
+    return null;
+  }
+};
+
+export async function GET(req) {
+  const url = new URL(req.url);
+  const urlParams = new URLSearchParams(url.search);
+  console.log("Stripe callback - URL Params:", Object.fromEntries(urlParams));
+
+  if (urlParams.get("success") === "true") {
+    const email = urlParams.get("email");
+    if (email) {
+      try {
+        // Initialize Firebase
+        const db = initializeFirebaseAdmin();
+        if (db) {
+          // Update the user's premium status in Firestore
+          const normalizedEmail = email.toLowerCase();
+          const safeEmailKey = normalizedEmail.replace(/[.#$\/\[\]]/g, '_');
+          const timestamp = new Date().toISOString();
+          
+          // Update in paid_emails collection
+          await db.collection('paid_emails').doc(safeEmailKey).set({
+            email: normalizedEmail,
+            isPremium: true,
+            premiumSince: timestamp,
+            updatedAt: timestamp
+          }, { merge: true });
+          
+          console.log(`Added ${normalizedEmail} to paid_emails collection in Firebase`);
+          
+          // Check if user already exists in users collection
+          const usersRef = db.collection('users');
+          const userQuery = await usersRef.where('email', '==', normalizedEmail).get();
+          
+          if (!userQuery.empty) {
+            // Update existing user
+            const userDoc = userQuery.docs[0];
+            await usersRef.doc(userDoc.id).update({
+              isPremium: true,
+              premiumSince: timestamp,
+              updatedAt: timestamp
+            });
+            console.log(`Updated premium status for existing user ${normalizedEmail}`);
+          }
+        } else {
+          console.error("Failed to initialize Firebase in Stripe callback");
+        }
+      } catch (error) {
+        console.error("Firebase error in Stripe callback:", error);
       }
-    } catch (error) {
-      console.error("Edge Config error:", error);
+      
+      // Redirect to sign in page with success message
+      return NextResponse.redirect(new URL(`/auth/signin?premium=true&email=${encodeURIComponent(email)}`, req.url));
     }
   }
   
-  return NextResponse.json({ received: true });
+  console.log("Stripe callback - Failed to update premium status");
+  return NextResponse.redirect(new URL("/?payment_failed=true", req.url));
+}
+
+export async function POST(req) {
+  const url = new URL(req.url);
+  const urlParams = new URLSearchParams(url.search);
+  console.log("Stripe callback - POST URL Params:", Object.fromEntries(urlParams));
+
+  if (urlParams.get("success") === "true") {
+    const email = urlParams.get("email");
+    if (email) {
+      // We'll handle the premium status update through the webhook
+      
+      // Redirect to sign in page with success message
+      return NextResponse.redirect(new URL(`/auth/signin?premium=true&email=${encodeURIComponent(email)}`, req.url));
+    }
+  }
+  
+  console.log("Stripe callback - Failed to update premium status");
+  return NextResponse.redirect(new URL("/?payment_failed=true", req.url));
 }

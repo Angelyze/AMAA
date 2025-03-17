@@ -1,0 +1,414 @@
+/* Subscription & Premium Features Styles */
+
+/* 1. Premium Button & Pitch */
+.subscribe-btn {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color var(--transition-speed) ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subscribe-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+.premium-pitch {
+  text-align: center;
+  margin: var(--spacing-lg) 0;
+  font-size: 16px;
+  color: #555;
+}
+
+/* 2. Premium Modal */
+.premium-modal {
+  background-color: var(--background-color);
+  padding: var(--spacing-lg);
+  border-radius: var(--border-radius);
+  width: 90%;
+  max-width: 450px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  animation: modalFadeIn 0.3s ease-in-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-logo {
+  width: 120px;
+  margin: 0 auto var(--spacing-md);
+  display: block;
+}
+
+.premium-modal h3 {
+  text-align: center;
+  margin-bottom: var(--spacing-md);
+  font-size: 18px;
+  color: var(--text-color);
+}
+
+.modal-description {
+  margin-bottom: var(--spacing-md);
+  font-size: 14px;
+  line-height: 1.5;
+  color: #555;
+}
+
+.premium-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.input-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.premium-input {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 16px;
+  outline: none;
+  transition: border-color var(--transition-speed) ease;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+.premium-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.error-message {
+  color: var(--error-color);
+  font-size: 13px;
+  display: block;
+}
+
+.modal-note {
+  font-size: 12px;
+  color: #777;
+  margin-top: var(--spacing-sm);
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* 3. Subscription Page Buttons */
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.premium-button {
+  flex: 1;
+  padding: var(--spacing-md);
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-speed) ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.premium-button:hover {
+  background-color: var(--primary-hover);
+  box-shadow: 0 2px 8px rgba(var(--primary-color-rgb), 0.3);
+}
+
+.premium-button:active {
+  transform: translateY(1px);
+}
+
+.cancel-button {
+  padding: var(--spacing-md);
+  background-color: transparent;
+  color: #777;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all var(--transition-speed) ease;
+  flex: 1;
+}
+
+.cancel-button:hover {
+  background-color: var(--light-background);
+  color: var(--text-color);
+}
+
+/* 4. Subscription Pages */
+.subscribe-container,
+.success-container,
+.cancel-container {
+  max-width: 600px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: var(--background-color);
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.about-subscribe-btn {
+  display: inline-block;
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: var(--border-radius);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.about-subscribe-btn:hover {
+  background-color: var(--primary-hover);
+  text-decoration: none;
+  color: white;
+}
+
+.about-cta {
+  text-align: center;
+  margin-top: var(--spacing-lg);
+}
+
+.premium-benefits {
+  list-style-type: none;
+  padding: 0;
+  margin: var(--spacing-md) 0;
+}
+
+.premium-benefits li {
+  margin-bottom: var(--spacing-sm);
+  padding-left: 24px;
+  position: relative;
+}
+
+.premium-benefits li:before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.feature-card {
+  background-color: var(--light-background);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.feature-card h3 {
+  margin-top: 0;
+  color: var(--primary-color);
+  font-size: 16px;
+}
+
+.feature-card p {
+  margin-bottom: 0;
+  font-size: 14px;
+}
+
+/* 5. About & Terms Pages */
+.about-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+.container {
+  margin-top: 0 !important; /* Override any negative margin */
+}
+
+.about-logo {
+  max-width: 400px;
+  margin-bottom: var(--spacing-md);
+}
+
+.about-title {
+  font-size: 32px;
+  margin-bottom: var(--spacing-lg);
+  color: var(--text-color);
+}
+
+.about-section {
+  margin-bottom: var(--spacing-xl);
+}
+
+.about-section h2 {
+  padding-bottom: var(--spacing-sm);
+  color: var(--text-color);
+}
+
+.about-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color var(--transition-speed) ease;
+}
+
+.about-link:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+/* 6. Dark Theme Styles */
+.dark-theme .premium-pitch {
+  color: #aaa;
+}
+
+.dark-theme .premium-modal {
+  background-color: var(--light-background);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+
+.dark-theme .premium-modal h3 {
+  color: var(--text-color);
+}
+
+.dark-theme .modal-description {
+  color: #bbb;
+}
+
+.dark-theme .premium-input {
+  background-color: rgba(0, 0, 0, 0.2);
+  color: var(--text-color);
+  border-color: var(--border-color);
+}
+
+.dark-theme .premium-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+}
+
+.dark-theme .modal-note {
+  color: #aaa;
+}
+
+.dark-theme .premium-button {
+  background-color: var(--primary-color);
+}
+
+.dark-theme .premium-button:hover {
+  background-color: var(--primary-hover);
+}
+
+.dark-theme .cancel-button {
+  color: #aaa;
+  border-color: var(--border-color);
+}
+
+.dark-theme .cancel-button:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-color);
+}
+
+.dark-theme .subscribe-container,
+.dark-theme .success-container,
+.dark-theme .cancel-container {
+  background-color: var(--light-background);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.dark-theme .feature-card {
+  background-color: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.dark-theme .feature-card h3 {
+  color: var(--primary-color);
+}
+
+.dark-theme .about-title,
+.dark-theme .about-section h2 {
+  color: var(--text-color);
+}
+
+.dark-theme .premium-benefits li:before {
+  color: var(--primary-color);
+}
+
+/* 7. Media Queries */
+@media (max-width: 768px) {
+  .premium-modal {
+    padding: var(--spacing-md);
+    width: 95%;
+  }
+  
+  .modal-logo {
+    width: 100px;
+  }
+  
+  .premium-modal h3 {
+    font-size: 16px;
+  }
+  
+  .button-group {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  .premium-button,
+  .cancel-button {
+    padding: var(--spacing-sm);
+    font-size: 14px;
+  }
+  
+  .subscribe-container,
+  .success-container,
+  .cancel-container {
+    padding: var(--spacing-md);
+    margin: 30px auto;
+  }
+  
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .about-container {
+    padding: var(--spacing-md);
+  }
+  
+  .about-logo {
+    max-width: 250px;
+  }
+  
+  .about-title {
+    font-size: 24px;
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .about-section {
+    margin-bottom: var(--spacing-lg);
+  }
+  
+  .premium-benefits li {
+    padding-left: 20px;
+    font-size: 14px;
+  }
+} 

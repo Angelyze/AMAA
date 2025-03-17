@@ -1,0 +1,1451 @@
+/* Logo */
+.logo {
+  width: 350px;
+  max-width: 100%;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.logo-sticky {
+  width: 150px;
+  max-width: 100%;
+  margin-right: 20px;
+  flex-shrink: 0;
+}
+
+/* COMPLETELY NEW SEARCH BOX STYLES */
+.search-box,
+.search-box-sticky {
+  /* Basic layout */
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 600px;
+  height: 46px;
+  margin: 0 auto;
+  padding: 0 10px;
+
+  /* The ONLY border */
+  border: 1px solid #dfe1e5;
+  border-radius: 23px;
+
+  /* Clean background */
+  background-color: #fff;
+
+  /* Transitions */
+  transition: all 0.3s ease;
+}
+
+/* Sticky version adjustments */
+.search-box-sticky {
+  height: 40px;
+  border-radius: 20px;
+  margin: 0;
+  border: 1px solid #dfe1e5;
+  box-shadow: none;
+  background-color: #fff;
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+/* Hover effect for the container */
+.search-box:hover,
+.search-box-sticky:hover {
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+  border-color: transparent;
+}
+
+/* Input element inside */
+.search-box input,
+.search-box-sticky input {
+  flex: 1;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0 80px 0 16px;
+  /* Allow space for buttons on right */
+  font-size: 16px;
+  color: #333;
+}
+
+/* Dark theme styles for buttons */
+.dark-theme .search-box,
+.dark-theme .search-box-sticky {
+  border-color: #444;
+  background-color: #333;
+}
+
+.dark-theme .search-box input,
+.dark-theme .search-box-sticky input {
+  color: #eee;
+}
+
+/* Dark theme styles for search box */
+.dark-theme .search-box-sticky {
+  border-color: #555;
+  background-color: #333;
+}
+
+.dark-theme .search-box-sticky input {
+  color: #eee;
+}
+
+.dark-theme .search-box-sticky:hover {
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+
+  .search-box,
+  .search-box-sticky {
+    height: 38px;
+    border-radius: 19px;
+    max-width: 100%;
+    padding: 0 8px;
+  }
+
+  .search-box input,
+  .search-box-sticky input {
+    font-size: 13px;
+    padding: 0 70px 0 10px;
+    /* Adjust for smaller buttons */
+  }
+
+  /* Smaller buttons on mobile */
+  .option-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .option-btn .icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Adjust button positions for smaller screens */
+  .option-btn.voice-btn {
+    right: 46px;
+  }
+
+  .option-btn.search-btn {
+    right: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+
+  .search-box,
+  .search-box-sticky {
+    height: 34px;
+    border-radius: 17px;
+    max-width: 100%;
+    padding: 0 6px;
+  }
+
+  .search-box input,
+  .search-box-sticky input {
+    font-size: 12px;
+    padding: 0 60px 0 8px;
+    /* Adjust for smaller buttons */
+  }
+
+  /* Even smaller buttons on tiny screens */
+  .option-btn {
+    width: 24px;
+    height: 24px;
+    margin: 0 1px;
+  }
+
+  .option-btn .icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Adjust button positions for tiny screens */
+  .option-btn.voice-btn {
+    right: 40px;
+  }
+
+  .option-btn.search-btn {
+    right: 8px;
+  }
+}
+
+/* Responsive adjustments for search box */
+@media (max-width: 768px) {
+  .search-box-sticky {
+    height: 36px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .search-box-sticky {
+    height: 34px;
+    border-radius: 17px;
+  }
+
+  .search-box-sticky input {
+    font-size: 13px;
+    padding: 0 70px 0 12px;
+  }
+}
+
+/* Button styles */
+.option-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0 2px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.option-btn:hover {
+  opacity: 1;
+}
+
+/* Updated search button styles to handle both icon and spinner */
+.option-btn.search-btn {
+  background-color: #1a73e8;
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  margin: 0 4px;
+}
+
+/* Ensure the AskIcon is always visible */
+.option-btn.search-btn .icon {
+  filter: brightness(0) invert(1);
+  display: block;
+  width: 20px;
+  height: 20px;
+  visibility: visible;
+  opacity: 1;
+  z-index: 1;
+}
+
+/* Position the loading spinner on top of the icon */
+.option-btn.search-btn .loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.back-to-top {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  padding: 0;
+  margin: 0;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+.back-to-top:hover {
+  transform: scale(1.1);
+  background-color: #f0f0f0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.back-to-top img {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+
+/* General icon styles */
+.icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Button styles */
+.new-session-btn,
+.subscribe-btn {
+  padding: 10px 20px;
+  border-radius: var(--border-radius-lg);
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: background-color var(--transition-speed) ease,
+    color var(--transition-speed) ease;
+}
+
+.new-session-btn {
+  border: 1px solid var(--primary-color);
+  background-color: transparent;
+  color: var(--primary-color);
+  min-width: 90px;
+  box-sizing: border-box;
+  /* Ensure padding is included in width */
+}
+
+.new-session-btn:hover {
+  background-color: var(--hover-bg);
+  color: var(--primary-hover);
+  border-color: var(--primary-color);
+  box-shadow: 0 1px 3px rgba(var(--primary-color-rgb), 0.2);
+}
+
+.subscribe-btn {
+  padding: 12px 25px;
+  border: none;
+  border-radius: var(--border-radius-lg);
+  background-color: var(--primary-color);
+  color: #fff;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.subscribe-btn:hover {
+  background-color: var(--primary-hover);
+}
+
+/* Conversation area */
+.conversation {
+  margin-top: 20px;
+  width: 100%;
+  max-width: 1000px;
+  text-align: left;
+  word-wrap: break-word;
+  display: flex;
+  flex-direction: column;
+}
+
+.message {
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.message-role {
+  color: var(--primary-color);
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.message-header:hover .message-role {
+  color: var(--primary-hover);
+}
+
+@media (prefers-color-scheme: dark) {
+  .message-role {
+    color: var(--primary-color);
+  }
+}
+
+.message-content {
+  font-size: inherit;
+}
+
+.message-content .formatted-answer,
+.message-content .answer-paragraph,
+.message-content .answer-list,
+.message-content .answer-list-item,
+.message-content .code-block {
+  font-size: inherit;
+}
+
+.message-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Text size control and copy button */
+.size-control-btn {
+  cursor: pointer;
+  color: var(--primary-color);
+  font-weight: bold;
+  transition: color var(--transition-speed) ease;
+}
+
+.size-control-btn:hover {
+  color: var(--primary-hover);
+}
+
+.text-label {
+  color: var(--text-color);
+  font-weight: normal;
+}
+
+.copy-link {
+  cursor: pointer;
+  color: var(--primary-color);
+  font-weight: bold;
+  margin-left: 6px;
+  transition: color var(--transition-speed) ease;
+}
+
+.copy-link:hover {
+  color: var(--primary-hover);
+}
+
+/* Copy notification */
+.copy-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #333;
+  color: white;
+  padding: 10px 20px;
+  border-radius: var(--border-radius-sm);
+  z-index: 1000;
+  animation: fadeInOut 2s ease;
+}
+
+@keyframes fadeInOut {
+  0% {
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Saved conversations */
+.saved-conversations {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  margin-top: 0px;
+  margin-bottom: 20px;
+}
+
+.saved-conversations label {
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+}
+
+/* Dropdown component */
+.dropdown-wrapper {
+  margin: 0;
+  min-width: 120px;
+}
+
+.dropdown-header {
+  padding: 8px;
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--input-bg);
+  color: var(--text-color);
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQgNkw4IDEwTDEyIDYiIHN0cm9rZT0iIzAwMDAwMCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K") no-repeat right 8px center;
+  background-size: 12px;
+  transition: border-color var(--transition-speed) ease,
+    background-color var(--transition-speed) ease,
+    color var(--transition-speed) ease;
+}
+
+.dropdown-header:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  box-shadow: 0 2px 4px var(--shadow-color);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transition: background-color var(--transition-speed) ease;
+  display: none;
+  /* Hide by default */
+}
+
+.dropdown-list.open {
+  display: block;
+  /* Show when open class is applied */
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+  color: var(--text-color);
+  cursor: pointer;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.dropdown-item:hover {
+  background: var(--hover-bg);
+}
+
+.dropdown-item-text {
+  flex-grow: 1;
+  color: var(--text-color);
+  transition: color var(--transition-speed) ease;
+}
+
+.selected-voice {
+  font-weight: bold;
+  color: #0097b2;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 5px;
+  color: var(--text-color);
+  transition: background-color var(--transition-speed) ease;
+}
+
+.delete-btn:hover {
+  background-color: rgba(255, 0, 0, 0.1);
+}
+
+.delete-icon {
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+}
+
+/* User profile styles */
+.user-area {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 20px;
+  background-color: var(--hover-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: var(--border-radius-lg);
+  background-color: var(--card-bg);
+  box-shadow: 0 2px 4px var(--shadow-color);
+  transition: background-color var(--transition-speed) ease;
+}
+
+.user-profile:hover {
+  background-color: var(--hover-bg);
+}
+
+.profile-pic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-right: 10px;
+  object-fit: cover;
+  border: 2px solid var(--primary-color);
+}
+
+.user-name {
+  font-weight: 500;
+  color: var(--text-color);
+  margin-right: 10px;
+  transition: color var(--transition-speed) ease;
+}
+
+.menu-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform var(--transition-speed) ease;
+}
+
+.user-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  box-shadow: 0 2px 8px var(--shadow-color);
+  z-index: 1000;
+  margin-top: 10px;
+  width: 150px;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.menu-item {
+  padding: 10px;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: background-color var(--transition-speed) ease,
+    color var(--transition-speed) ease;
+}
+
+.menu-item:hover {
+  background-color: var(--hover-bg);
+}
+
+.menu-divider {
+  height: 1px;
+  background-color: var(--divider-color);
+  margin: 5px 0;
+  transition: background-color var(--transition-speed) ease;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+/* Premium pitch */
+.premium-pitch {
+  margin-top: 20px;
+  font-size: var(--font-size-sm);
+  color: var(--light-text);
+  transition: color var(--transition-speed) ease;
+}
+
+/* Loading states */
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 151, 178, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-message {
+  opacity: 0.8;
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  display: inline-block;
+  animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* Formatted answer styles */
+.formatted-answer {
+  font-size: inherit;
+  line-height: 1.5;
+  color: var(--text-color);
+  transition: color var(--transition-speed) ease;
+}
+
+.answer-paragraph {
+  margin: 0 0 12px;
+  font-size: inherit;
+}
+
+.answer-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  font-size: inherit;
+}
+
+.answer-list-item {
+  margin-bottom: 6px;
+  font-size: inherit;
+}
+
+.formatted-answer strong {
+  font-weight: 600;
+}
+
+.formatted-answer code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  background-color: var(--code-bg);
+  padding: 2px 4px;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  transition: background-color var(--transition-speed) ease;
+}
+
+.formatted-answer a {
+  color: var(--primary-color, #0097b2);
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.formatted-answer a:hover {
+  color: var(--primary-hover, #0cc0df);
+  text-decoration: none;
+}
+
+.code-block {
+  font-family: 'Consolas', 'Monaco', monospace;
+  background-color: var(--code-block-bg);
+  padding: 12px 16px;
+  border-radius: var(--border-radius-md);
+  margin: 12px 0;
+  overflow-x: auto;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  transition: background-color var(--transition-speed) ease;
+}
+
+/* Ensure font size is properly applied */
+.font-size-controlled,
+.font-size-controlled p,
+.font-size-controlled ul,
+.font-size-controlled ol,
+.font-size-controlled li,
+.font-size-controlled div {
+  font-size: inherit !important;
+  /* Use !important to override any other styles */
+}
+
+/* Ad container with fixed height */
+.ad-banner {
+  height: 100px;
+  width: 100%;
+  max-height: 100px;
+  overflow: hidden;
+  margin: 10px 0;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adsense-container {
+  height: 100px !important;
+  max-height: 100px !important;
+  width: 100%;
+  overflow: hidden;
+}
+
+.adsense-container .adsbygoogle {
+  height: 100px !important;
+  max-height: 100px !important;
+}
+
+.ad-placeholder {
+  height: 100px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  font-size: 14px;
+}
+
+.fixed-height-ad {
+  height: 100px !important;
+  max-height: 100px !important;
+}
+
+/* More specific selectors to ensure theme color is applied */
+.message .message-header .message-role,
+.message.user .message-header .message-role,
+.message.assistant .message-header .message-role {
+  color: var(--primary-color) !important;
+  /* Using !important to override any other styles */
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+/* Ensure dark mode compatibility with the same level of specificity */
+@media (prefers-color-scheme: dark) {
+
+  .message .message-header .message-role,
+  .message.user .message-header .message-role,
+  .message.assistant .message-header .message-role {
+    color: var(--primary-color) !important;
+  }
+}
+
+/* Basic sticky header structure */
+.sticky-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 60px;
+  background: var(--bg-color, #fff);
+  z-index: 1000;
+  animation: slideDown 0.3s ease-in-out;
+  box-shadow: 0 1px 6px rgba(var(--primary-rgb, 26, 115, 232), 0.2);
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.sticky-content {
+  max-width: 1200px;
+  height: 60px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Logo on the left with padding */
+.sticky-logo {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Logo with proper dimensions (no scaling or stretching) */
+.logo-sticky {
+  height: 40px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+  margin: 0;
+}
+
+/* Center section with the search box */
+.sticky-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Button container on the right - ensure it's clearly visible */
+.sticky-right {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1010;
+  /* Ensure it's above other elements */
+}
+
+/* Back to top button with proper vertical alignment */
+.back-to-top {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background-color: var(--bg-color, #fff);
+  border: 1px solid var(--border-color, #dfe1e5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  padding: 0;
+  transition: transform 0.2s ease;
+}
+
+.back-to-top:hover {
+  transform: scale(1.1);
+  background-color: var(--hover-bg-color, #f0f0f0);
+}
+
+.back-to-top img {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+/* Dark theme adjustments */
+.dark-theme .back-to-top {
+  background-color: #333;
+  border-color: #444;
+}
+
+.dark-theme .back-to-top:hover {
+  background-color: #3a3a3a;
+}
+
+.dark-theme .sticky-header {
+  box-shadow: 0 1px 6px rgba(var(--dark-primary-rgb, 66, 133, 244), 0.25);
+  background: var(--dark-bg-color, #3a3a3a);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .sticky-logo {
+    left: 15px;
+  }
+
+  .sticky-right {
+    right: 15px;
+  }
+
+  .logo-sticky {
+    height: 24px;
+  }
+
+  .back-to-top {
+    width: 36px;
+    height: 36px;
+  }
+
+  .back-to-top img {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sticky-logo {
+    left: 10px;
+  }
+
+  .sticky-right {
+    right: 10px;
+  }
+
+  .logo-sticky {
+    height: 20px;
+  }
+
+  .back-to-top {
+    width: 32px;
+    height: 32px;
+  }
+
+  .back-to-top img {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* We'll add back other sticky elements systematically */
+
+/* Final overrides to ensure only one border */
+.search-box,
+.search-box-sticky {
+  border: 1px solid var(--border-color) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.search-box:hover,
+.search-box-sticky:hover {
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28) !important;
+  border-color: transparent !important;
+}
+
+/* Ensure sticky search containers inside any parent maintain only one border */
+.sticky-header .search-box-sticky,
+.sticky-content .search-box-sticky {
+  border: 1px solid var(--border-color) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.sticky-header .search-box-sticky:hover,
+.sticky-content .search-box-sticky:hover {
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28) !important;
+  border-color: transparent !important;
+}
+
+/* Ensure inputs never have borders or outlines */
+.search-box input,
+.search-box-sticky input {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Add this at the end to ensure we override any other styles */
+.search-box,
+.search-box-sticky {
+  /* IMPORTANT: Enforce exactly ONE border */
+  border-width: 1px !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Ensure inputs NEVER have borders */
+.search-box input,
+.search-box-sticky input {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Search box styles with theme color support */
+.search-box:focus-within,
+.search-box-sticky:focus-within {
+  border-color: var(--focus-border-color, #0097b2) !important;
+  box-shadow: 0 0 0 1px var(--focus-border-color, #0097b2), 0 1px 6px rgba(0, 151, 178, 0.3) !important;
+}
+
+.dark-theme .search-box:focus-within,
+.dark-theme .search-box-sticky:focus-within {
+  border-color: var(--focus-border-color, #0097b2) !important;
+  box-shadow: 0 0 0 1px var(--focus-border-color, #0097b2) !important;
+}
+
+/* Position for voice button */
+.option-btn.voice-btn {
+  position: absolute;
+  right: 52px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Sticky header layout sections */
+.sticky-left {
+  flex: 0 0 auto;
+}
+
+.sticky-center {
+  flex: 1 1 auto;
+  max-width: 600px;
+  padding: 0 15px;
+}
+
+.sticky-right {
+  flex: 0 0 auto;
+}
+
+.logo-sticky {
+  height: 30px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  max-width: 100%;
+}
+
+/* Dark theme for sticky header */
+.dark-theme .sticky-header {
+  background-color: #2d2d2d;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .sticky-header {
+    height: 50px;
+  }
+
+  .sticky-content {
+    height: 50px;
+    padding: 0 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sticky-header {
+    height: 45px;
+  }
+
+  .sticky-content {
+    height: 45px;
+    padding: 0 10px;
+  }
+}
+
+/* Option button styles */
+.search-box-sticky:hover {
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+  border-color: transparent;
+}
+
+.search-box-sticky:focus-within {
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+  border-color: var(--primary-color, #1a73e8) !important;
+}
+
+/* Dark theme search box - add shadow by default */
+.dark-theme .search-box,
+.dark-theme .search-box-sticky {
+  background-color: #202124;
+  border-color: #3c4043;
+  box-shadow: 0 1px 6px rgba(0, 151, 178, 0.3);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.dark-theme .search-box input,
+.dark-theme .search-box-sticky input {
+  color: #eee;
+}
+
+/* Reverse hover effect in dark mode - remove shadow on hover */
+.dark-theme .search-box:hover,
+.dark-theme .search-box-sticky:hover {
+  box-shadow: none;
+  border-color: #3c4043;
+}
+
+/* Keep focus effect consistent with theme color */
+.dark-theme .search-box:focus-within,
+.dark-theme .search-box-sticky:focus-within {
+  border-color: var(--focus-border-color, #0097b2) !important;
+  box-shadow: 0 0 0 1px var(--focus-border-color, #0097b2) !important;
+}
+
+/* Add these styles for the TTS controls */
+.controls-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+/* Update saved-conversations to use flex layout */
+.saved-conversations {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  margin-top: 0px;
+  margin-bottom: 20px;
+}
+
+/* Consistent button styling */
+.saved-conversations .new-session-btn {
+  min-width: 80px;
+  text-align: center;
+  white-space: nowrap;
+  padding: 8px 12px;
+  height: 36px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Consistent dropdown header styling to match button height */
+.saved-conversations .dropdown-header {
+  height: 36px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Style for the TTS dropdowns */
+.saved-conversations .dropdown-wrapper {
+  margin: 0;
+  min-width: 120px;
+}
+
+/* Make voice dropdown wider to fit longer voice names */
+.saved-conversations .dropdown-wrapper:nth-child(4) {
+  min-width: 180px;
+}
+
+@media (max-width: 768px) {
+  .controls-container {
+    flex-direction: row;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    width: 100%;
+  }
+
+  .saved-conversations .new-session-btn,
+  .saved-conversations .dropdown-wrapper {
+    margin-bottom: 5px;
+  }
+}
+
+/* Play/Pause button */
+.play-pause-btn {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+}
+
+/* Make the controls container have margin between rows */
+.saved-conversations .controls-container:first-child {
+  margin-bottom: 10px;
+}
+
+/* Ensure the buttons have the same height */
+.saved-conversations .controls-container .new-session-btn {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Layout for the two rows of controls */
+.saved-conversations .first-row,
+.saved-conversations .second-row {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+}
+
+/* Make the Select an AMAA dropdown fit appropriately in the row */
+.saved-conversations .select-amaa {
+  flex: 1 1 auto;
+  min-width: 150px;
+  max-width: calc(100% - 320px); /* Reduced width to make room for wider buttons */
+}
+
+/* First Row Buttons - Clean Implementation */
+.saved-conversations .first-row {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* Remove ALL conflicting styles for the first row buttons */
+.saved-conversations .first-row .new-session-btn {
+  flex: 0 0 auto;
+  width: 150px !important; /* Using !important to override any other width settings */
+  min-width: 150px !important; /* Override any minimum width constraints */
+  padding: 8px 16px; /* Direct padding on button */
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  margin: 0;
+  height: 36px;
+  box-sizing: border-box;
+}
+
+/* Override the first-child selector specifically */
+.saved-conversations .first-row .new-session-btn:first-child {
+  width: 150px !important;
+  min-width: 150px !important;
+}
+
+/* Second Row Styles - Keep as is */
+.saved-conversations .tts-voices {
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+.saved-conversations .speed-btn {
+  min-width: 80px;
+  width: 80px;
+}
+
+/* For the TTS row, we keep the first button narrow */
+.saved-conversations .second-row .new-session-btn:first-child {
+  min-width: 80px;
+  width: 80px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .saved-conversations .first-row,
+  .saved-conversations .second-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .saved-conversations .first-row .new-session-btn {
+    flex: 0 0 calc(50% - 5px);
+    width: calc(50% - 5px);
+  }
+
+  .saved-conversations .select-amaa {
+    flex: 1 0 100%;
+    max-width: none;
+    order: 3;
+    margin-top: 10px;
+  }
+
+  .saved-conversations .tts-voices {
+    flex: 1 0 100%;
+    margin-top: 10px;
+  }
+}
+
+/* For very small screens */
+@media (max-width: 480px) {
+  .saved-conversations .first-row .new-session-btn {
+    font-size: var(--font-size-sm);
+    padding: 8px 12px;
+  }
+}
+
+/* Ensure the dropdown header has appropriate size */
+.saved-conversations .select-amaa .dropdown-header {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 15px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 36px;
+}
+
+/* Add the new edit-related styles at the appropriate location */
+
+/* Item actions container for edit and delete buttons */
+.item-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* Edit button styling */
+.edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-right: 5px;
+  color: var(--theme-color, #0097b2);
+}
+
+/* Edit mode styling */
+.edit-mode {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.edit-mode input {
+  flex: 1;
+  margin-right: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--theme-color, #0097b2);
+  border-radius: 3px;
+  font-size: 14px;
+}
+
+.edit-buttons {
+  display: flex;
+  align-items: center;
+}
+
+.save-edit-btn,
+.cancel-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 5px;
+  color: var(--theme-color, #0097b2);
+}
+
+/* Apply theme color to SVG icons */
+.item-actions svg,
+.edit-buttons svg {
+  fill: currentColor;
+  color: var(--theme-color, #0097b2);
+}
+
+/* Ensure the delete button uses the theme color */
+.delete-btn {
+  color: var(--theme-color, #0097b2);
+}
+
+.dark-theme .dropdown-item-text {
+  color: var(--light-text);
+}
+
+.dark-theme .selected-voice {
+  color: #0cc0df;
+}
