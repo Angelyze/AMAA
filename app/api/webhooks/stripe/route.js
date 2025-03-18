@@ -165,33 +165,67 @@ async function handleSubscriptionUpdate(event, db, auth) {
       throw new Error('No customer email found');
     }
     
-    // Update premium status based on subscription status
-    // A subscription is considered active if its status is 'active' or 'trialing'
-    // If cancel_at_period_end is true, the subscription will be canceled at the period end
-    // but the status will still be 'active' until then
-    const isPremium = ['active', 'trialing'].includes(status);
+    // IMPORTANT: If cancel_at_period_end is true, we need to treat it as a cancellation
+    // even though the status will still be 'active' until the period ends
+    // This is the critical change to ensure cancellations take effect immediately!
+    
+    // If cancelAtPeriodEnd is true, force the premium status to false immediately
+    // rather than waiting for the period to end, which resolves the cancellation detection issue
+    const isPremium = cancelAtPeriodEnd ? false : ['active', 'trialing'].includes(status);
     
     // If the subscription is canceled at period end, log this clearly
     if (cancelAtPeriodEnd) {
-      console.log(`SCHEDULED CANCELLATION: Subscription for ${customerEmail} is scheduled to be canceled at period end`);
+      console.log(`CANCELLATION DETECTED: Subscription for ${customerEmail} has been cancelled`);
       console.log(`Current end date: ${new Date(subscription.current_period_end * 1000).toISOString()}`);
+      console.log(`FORCING PREMIUM STATUS TO FALSE IMMEDIATELY due to cancellation`);
       
-      // Check if this is a new cancellation (not previously marked as cancelAtPeriodEnd)
+      // Double-check by directly updating the documents
       try {
         const emailKey = customerEmail.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
-        const paidEmailDoc = await db.collection('paid_emails').doc(emailKey).get();
         
-        if (paidEmailDoc.exists) {
-          const data = paidEmailDoc.data();
-          if (data.cancelAtPeriodEnd !== true) {
-            console.log(`First time marking subscription as cancelAtPeriodEnd for ${customerEmail}`);
-            
-            // This is a new cancellation, we might want to send an email or notification
-            // but we keep the premium status true until the period ends
+        // Forcefully update the paid_emails collection to non-premium
+        await db.collection('paid_emails').doc(emailKey).set({
+          isPremium: false,
+          cancelAtPeriodEnd: true,
+          subscriptionStatus: 'cancellation_pending',
+          cancellationDate: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          source: 'subscription_cancelled_immediately'
+        }, { merge: true });
+        
+        // Also update the user in the users collection if possible
+        const usersQuery = await db.collection('users')
+          .where('email', '==', customerEmail.toLowerCase())
+          .limit(1)
+          .get();
+        
+        if (!usersQuery.empty) {
+          const userDoc = usersQuery.docs[0];
+          await userDoc.ref.set({
+            isPremium: false,
+            cancelAtPeriodEnd: true,
+            subscriptionStatus: 'cancellation_pending',
+            updatedAt: new Date().toISOString(),
+            cancellationDate: new Date().toISOString()
+          }, { merge: true });
+          
+          // Also update Firebase Auth claims
+          try {
+            await auth.setCustomUserClaims(userDoc.id, {
+              isPremium: false,
+              cancelAtPeriodEnd: true,
+              subscriptionStatus: 'cancellation_pending',
+              updatedAt: new Date().toISOString()
+            });
+            console.log(`Updated Auth claims for ${customerEmail} to reflect cancellation`);
+          } catch (authError) {
+            console.error(`Error updating Auth claims for cancellation:`, authError);
           }
+          
+          console.log(`Forcefully updated users collection for ${customerEmail} to reflect cancellation`);
         }
-      } catch (checkError) {
-        console.error('Error checking existing cancelAtPeriodEnd status:', checkError);
+      } catch (forceUpdateError) {
+        console.error('Error during forced update for cancellation:', forceUpdateError);
       }
     }
     
@@ -218,13 +252,13 @@ async function handleSubscriptionUpdate(event, db, auth) {
     await updatePremiumStatus(db, auth, {
       email: customerEmail,
       isPremium,
-      subscriptionStatus: status,
+      subscriptionStatus: cancelAtPeriodEnd ? 'cancellation_pending' : status,
       subscriptionId: subscription.id,
       customerId,
       cancelAtPeriodEnd,
       subscriptionPeriodEnd,
       subscriptionItems,
-      source: 'subscription_update',
+      source: cancelAtPeriodEnd ? 'subscription_cancelled' : 'subscription_update',
     });
     
     console.log(`Subscription updated for ${customerEmail}, isPremium: ${isPremium}, cancel_at_period_end: ${cancelAtPeriodEnd}`);

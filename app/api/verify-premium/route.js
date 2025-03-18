@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { initializeFirebaseAdmin } from '../../utils/firebaseAdmin';
 import fetch from 'node-fetch';
+import Stripe from 'stripe';
 
 // Route segment config
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export const runtime = 'nodejs';
  * 1. Firestore paid_emails collection
  * 2. Firestore users collection
  * 3. Firebase Auth custom claims
- * 4. Stripe subscription status (for active subscriptions)
+ * 4. Direct Stripe API verification (as a fallback)
  */
 export async function POST(request) {
   try {
@@ -70,14 +71,30 @@ export async function POST(request) {
         results.paidEmailsCheck.eligible = 
           data.isPremium === true && 
           subscriptionStatus !== 'canceled' && 
-          subscriptionStatus !== 'unpaid';
+          subscriptionStatus !== 'unpaid' &&
+          subscriptionStatus !== 'cancellation_pending';
         
-        // For scheduled cancellations, we still honor the premium status
-        // but we'll include this info in the response
+        // For scheduled cancellations, we now consider the user as NOT premium
+        // This is the key change from the previous version
+        if (cancelAtPeriodEnd) {
+          results.paidEmailsCheck.eligible = false;
+          console.log(`Subscription is marked for cancellation, user is NOT premium`);
+        }
+        
         results.paidEmailsCheck.cancelAtPeriodEnd = cancelAtPeriodEnd;
         results.paidEmailsCheck.subscriptionStatus = subscriptionStatus;
+        results.paidEmailsCheck.customerId = data.customerId;
+        results.paidEmailsCheck.subscriptionId = data.subscriptionId;
         
         console.log(`Paid emails check result: ${results.paidEmailsCheck.eligible}`);
+        
+        // Store subscription IDs for Stripe direct check
+        if (data.customerId) {
+          results.stripeCustomerId = data.customerId;
+        }
+        if (data.subscriptionId) {
+          results.stripeSubscriptionId = data.subscriptionId;
+        }
         
         // If the document exists but indicates the user is not premium,
         // that's a stronger signal than not finding them at all
@@ -85,15 +102,7 @@ export async function POST(request) {
           console.log(`User explicitly marked as non-premium in paid_emails`);
           
           // This is a definitive negative result - user was premium but isn't anymore
-          return NextResponse.json({
-            eligible: false,
-            email: normalizedEmail,
-            source: 'paid_emails',
-            cancelAtPeriodEnd: data.cancelAtPeriodEnd,
-            subscriptionStatus: data.subscriptionStatus,
-            timestamp: new Date().toISOString(),
-            results
-          });
+          // But we'll still do the Stripe check as a fallback
         }
       } else {
         console.log(`Email ${normalizedEmail} not found in paid_emails collection`);
@@ -121,7 +130,14 @@ export async function POST(request) {
           // Similar logic to paid_emails check
           const cancelAtPeriodEnd = userData.cancelAtPeriodEnd === true;
           
-          results.usersCheck.eligible = userData.isPremium === true;
+          // If cancellation is pending, consider as not premium
+          results.usersCheck.eligible = 
+            userData.isPremium === true && 
+            !cancelAtPeriodEnd &&
+            userData.subscriptionStatus !== 'canceled' &&
+            userData.subscriptionStatus !== 'unpaid' &&
+            userData.subscriptionStatus !== 'cancellation_pending';
+            
           results.usersCheck.cancelAtPeriodEnd = cancelAtPeriodEnd;
           
           console.log(`Users collection check result: ${results.usersCheck.eligible}`);
@@ -129,13 +145,6 @@ export async function POST(request) {
           // If explicitly marked as non-premium, that's definitive
           if (userData.isPremium === false) {
             console.log(`User explicitly marked as non-premium in users collection`);
-            return NextResponse.json({
-              eligible: false,
-              email: normalizedEmail,
-              source: 'users_collection',
-              timestamp: new Date().toISOString(),
-              results
-            });
           }
         } else {
           console.log(`No user found with email ${normalizedEmail} in users collection`);
@@ -156,7 +165,11 @@ export async function POST(request) {
         if (userRecord && userRecord.customClaims) {
           const customClaims = userRecord.customClaims;
           
-          results.authCheck.eligible = customClaims.isPremium === true;
+          // Same logic - if cancellation is pending, not premium
+          results.authCheck.eligible = 
+            customClaims.isPremium === true && 
+            !customClaims.cancelAtPeriodEnd;
+            
           results.authCheck.cancelAtPeriodEnd = customClaims.cancelAtPeriodEnd === true;
           
           console.log(`Auth claims check result: ${results.authCheck.eligible}`);
@@ -164,13 +177,6 @@ export async function POST(request) {
           // If explicitly marked as non-premium, that's definitive
           if (customClaims.isPremium === false) {
             console.log(`User explicitly marked as non-premium in Auth claims`);
-            return NextResponse.json({
-              eligible: false,
-              email: normalizedEmail,
-              source: 'auth_claims',
-              timestamp: new Date().toISOString(),
-              results
-            });
           }
         } else {
           console.log(`No custom claims found for UID: ${uid}`);
@@ -180,18 +186,148 @@ export async function POST(request) {
       }
     }
     
-    // Determine overall eligibility based on the checks performed
-    const isEligible = 
+    // 4. FALLBACK: Direct Stripe API check for subscription status
+    // This is a critical fallback when our database gets out of sync with Stripe
+    try {
+      // Only check Stripe if we have a customerId from previous checks
+      if (results.stripeCustomerId || results.stripeSubscriptionId) {
+        results.stripeCheck.checked = true;
+        console.log(`Performing direct Stripe API verification as fallback...`);
+        
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        
+        // If we have a subscription ID, check it directly
+        if (results.stripeSubscriptionId) {
+          try {
+            const subscription = await stripe.subscriptions.retrieve(results.stripeSubscriptionId);
+            
+            // Check subscription status and cancellation
+            const isActive = ['active', 'trialing'].includes(subscription.status);
+            const isCanceled = subscription.cancel_at_period_end || subscription.status === 'canceled';
+            
+            results.stripeCheck.eligible = isActive && !isCanceled;
+            results.stripeCheck.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+            results.stripeCheck.status = subscription.status;
+            
+            console.log(`Direct Stripe subscription check result: ${results.stripeCheck.eligible}`);
+            console.log(`Stripe status: ${subscription.status}, cancel_at_period_end: ${subscription.cancel_at_period_end}`);
+            
+            // If stripe says it's canceled, we need to update our database
+            if (isCanceled && (results.paidEmailsCheck.eligible || results.usersCheck.eligible || results.authCheck.eligible)) {
+              console.log(`CRITICAL MISMATCH: Stripe says subscription is canceled but our database says it's active`);
+              console.log(`Queueing database update to reflect cancellation...`);
+              
+              // Queue a database update (do this async without waiting)
+              try {
+                // Force an update to Firestore
+                const forceCancellationUpdate = async () => {
+                  try {
+                    await db.collection('paid_emails').doc(emailKey).set({
+                      isPremium: false,
+                      subscriptionStatus: 'canceled',
+                      cancelAtPeriodEnd: true,
+                      updatedAt: new Date().toISOString(),
+                      cancellationDate: new Date().toISOString(),
+                      source: 'verify_premium_fallback'
+                    }, { merge: true });
+                    
+                    // Also update user if possible
+                    if (uid) {
+                      await db.collection('users').doc(uid).set({
+                        isPremium: false,
+                        subscriptionStatus: 'canceled',
+                        cancelAtPeriodEnd: true,
+                        updatedAt: new Date().toISOString(),
+                        cancellationDate: new Date().toISOString(),
+                      }, { merge: true });
+                      
+                      // Update Auth claims
+                      await auth.setCustomUserClaims(uid, {
+                        isPremium: false,
+                        cancelAtPeriodEnd: true,
+                        updatedAt: new Date().toISOString()
+                      });
+                    }
+                    
+                    console.log(`Database updated to reflect cancellation from Stripe direct check`);
+                  } catch (updateError) {
+                    console.error('Error updating database from Stripe direct check:', updateError);
+                  }
+                };
+                
+                // Don't await this - let it run in the background
+                forceCancellationUpdate();
+              } catch (queueError) {
+                console.error('Error queueing database update:', queueError);
+              }
+            }
+          } catch (subscriptionError) {
+            console.error('Error checking subscription directly:', subscriptionError);
+            
+            // If the subscription can't be found, it's definitely not active
+            if (subscriptionError.code === 'resource_missing') {
+              console.log('Subscription not found in Stripe - user is definitely not premium');
+              results.stripeCheck.eligible = false;
+              results.stripeCheck.status = 'not_found';
+            }
+          }
+        }
+        // If no subscription ID but we have customer ID, list their subscriptions
+        else if (results.stripeCustomerId) {
+          try {
+            const subscriptions = await stripe.subscriptions.list({
+              customer: results.stripeCustomerId,
+              status: 'all'
+            });
+            
+            // Check if customer has any active subscriptions
+            const activeSubscription = subscriptions.data.find(sub => 
+              ['active', 'trialing'].includes(sub.status) && !sub.cancel_at_period_end
+            );
+            
+            results.stripeCheck.eligible = !!activeSubscription;
+            results.stripeCheck.subscriptions = subscriptions.data.map(sub => ({
+              id: sub.id,
+              status: sub.status,
+              cancelAtPeriodEnd: sub.cancel_at_period_end
+            }));
+            
+            console.log(`Direct Stripe customer subscriptions check result: ${results.stripeCheck.eligible}`);
+            console.log(`Customer has ${subscriptions.data.length} subscriptions, ${activeSubscription ? 'with active' : 'no active'} subscription`);
+          } catch (customerError) {
+            console.error('Error checking customer subscriptions:', customerError);
+          }
+        }
+      }
+    } catch (stripeError) {
+      console.error('Error performing Stripe direct check:', stripeError);
+    }
+    
+    // Determine overall eligibility based on all the checks performed
+    let isEligible = 
       results.paidEmailsCheck.eligible || 
       results.usersCheck.eligible || 
       results.authCheck.eligible;
+      
+    // If Stripe direct check was performed and contradicts our database,
+    // trust Stripe's result as it's the source of truth
+    if (results.stripeCheck.checked) {
+      if (isEligible && !results.stripeCheck.eligible) {
+        console.log('STRIPE OVERRIDE: Stripe says user is NOT premium, overriding database results');
+        isEligible = false;
+      }
+    }
     
     // Determine the source of truth
     let source = 'none';
     let cancelAtPeriodEnd = false;
     let subscriptionStatus = null;
     
-    if (results.paidEmailsCheck.eligible) {
+    if (results.stripeCheck.eligible) {
+      source = 'stripe_api';
+      cancelAtPeriodEnd = results.stripeCheck.cancelAtPeriodEnd;
+      subscriptionStatus = results.stripeCheck.status;
+    } else if (results.paidEmailsCheck.eligible) {
       source = 'paid_emails';
       cancelAtPeriodEnd = results.paidEmailsCheck.cancelAtPeriodEnd;
       subscriptionStatus = results.paidEmailsCheck.subscriptionStatus;
@@ -201,6 +337,8 @@ export async function POST(request) {
     } else if (results.authCheck.eligible) {
       source = 'auth_claims';
       cancelAtPeriodEnd = results.authCheck.cancelAtPeriodEnd;
+    } else if (results.stripeCheck.checked) {
+      source = 'stripe_api_negative';
     }
     
     // Create the response
@@ -216,6 +354,9 @@ export async function POST(request) {
     if (subscriptionStatus) {
       response.subscriptionStatus = subscriptionStatus;
     }
+    
+    // Generate a unique verification ID for tracking
+    response.verificationId = `verify-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     
     // Log the final result
     console.log(`Final eligibility result for ${normalizedEmail}: ${isEligible} (source: ${source})`);
