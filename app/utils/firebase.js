@@ -178,6 +178,16 @@ export async function testAuth(email, password) {
       return { success: false, error: 'Auth service unavailable' };
     }
     
+    // If we don't have a password, just verify the connection without trying to sign in
+    if (!password) {
+      console.log('No password provided, just verifying Firebase Auth availability');
+      return { 
+        success: true, 
+        message: 'Firebase Auth is available' 
+      };
+    }
+    
+    // Only attempt sign in if password is provided
     console.log(`Attempting test auth with email: ${email}`);
     const result = await signInWithEmailAndPassword(authInstance, email, password);
     
@@ -190,6 +200,16 @@ export async function testAuth(email, password) {
       }
     };
   } catch (error) {
+    // If it's a missing password error, but we're just testing connectivity,
+    // we can still consider the test successful (Firebase responded)
+    if (error.code === 'auth/missing-password' && !password) {
+      console.log('Auth connection verified (got expected missing password error)');
+      return { 
+        success: true, 
+        message: 'Firebase Auth is available'
+      };
+    }
+    
     console.error('Test auth failed:', error.code, error.message);
     return { 
       success: false, 

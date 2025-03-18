@@ -597,64 +597,94 @@ export default function Home() {
 
   const handleLogin = async (e, email, password, setLoginError) => {
     e.preventDefault();
+    setLoginError('');
     
-    if (!email || !email.includes('@')) {
-      setLoginError('Please enter a valid email address');
+    if (!email) {
+      setLoginError('Email is required');
+      return;
+    }
+    
+    if (!password) {
+      setLoginError('Password is required');
       return;
     }
     
     try {
-      // Clear any previous errors
-      setLoginError('');
       console.log('Testing Firebase Auth connection first...');
-      
-      // Set loading state
-      setLoading(true);
-      
-      // Test Firebase Auth first
+      // Pass both email AND password to testAuth
       const testResult = await testAuth(email, password);
       
       if (testResult.success) {
         console.log('Test login successful, proceeding with real login');
         
-        // Now proceed with regular login that updates state
+        // Perform the actual login
         const result = await signIn(email, password);
         
         if (result.success) {
           console.log('Login success, closing modal');
           setShowLoginModal(false);
           
-          // Set premium status to true for now
-          setIsPremium(true);
-          
-          // Try to load saved conversations
-          try {
-            const saved = localStorage.getItem('savedConversations');
-            if (saved) {
-              setSavedConversations(JSON.parse(saved));
+          // Check if the user has premium access
+          if (result.isPremium) {
+            console.log('User has premium access');
+            setIsPremium(true);
+            
+            // Load saved conversations for premium user
+            try {
+              const saved = JSON.parse(localStorage.getItem('savedConversations') || '[]');
+              setSavedConversations(saved);
+            } catch (error) {
+              console.error('Error loading saved conversations:', error);
             }
-          } catch (err) {
-            console.error('Error loading conversations:', err);
+          } else {
+            console.log('User does not have premium access');
+            setIsPremium(false);
+            
+            // Check if there's a pending premium subscription
+            try {
+              const response = await fetch(`/api/check-premium-status?email=${encodeURIComponent(email)}`);
+              if (response.ok) {
+                const data = await response.json();
+                
+                if (data.isPremium) {
+                  console.log('Server indicates user has premium status, updating local state');
+                  setIsPremium(true);
+                } else {
+                  // User doesn't have premium status according to the server
+                  console.log('Server confirms user is not premium');
+                  setIsPremium(false);
+                  
+                  // Show a message about premium status
+                  alert('Welcome! You are logged in but don\'t have a premium subscription yet. Some features may be limited.');
+                }
+              }
+            } catch (error) {
+              console.error('Error checking premium status with server:', error);
+            }
           }
         } else {
-          console.error('Login failed after test success:', result.error);
+          console.error('Login failed:', result.error);
           setLoginError(result.error || 'Login failed. Please check your credentials.');
         }
       } else {
-        console.error('Test login failed:', testResult.error, testResult.code);
+        console.error('Test login failed:', testResult.error);
         
-        // Show specific error for network issues
-        if (testResult.code === 'auth/network-request-failed') {
-          setLoginError('Network error connecting to authentication service. Please check your internet connection and try again.');
+        // More specific error handling based on error code
+        if (testResult.code === 'auth/wrong-password') {
+          setLoginError('Incorrect password. Please try again.');
+        } else if (testResult.code === 'auth/user-not-found') {
+          setLoginError('No account found with this email. Please check your email or sign up.');
+        } else if (testResult.code === 'auth/too-many-requests') {
+          setLoginError('Too many failed login attempts. Please try again later.');
+        } else if (testResult.code === 'auth/network-request-failed') {
+          setLoginError('Network error. Please check your internet connection and try again.');
         } else {
-          setLoginError(testResult.error || 'Login failed. Please check your credentials.');
+          setLoginError('Firebase authentication failed. Please try again later.');
         }
       }
     } catch (error) {
-      console.error('Login process error:', error);
+      console.error('Login error:', error);
       setLoginError('An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
 
