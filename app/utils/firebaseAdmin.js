@@ -50,6 +50,9 @@ PRIVATE_KEY exists: ${!!process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE
       privateKey = privateKey.replace(/\\n/g, '\n');
     }
     
+    // Log first few characters of the private key for debugging (don't log the entire key)
+    console.log(`Private key starts with: "${privateKey.substring(0, 20)} ...`);
+    
     const credentials = {
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
@@ -57,10 +60,10 @@ PRIVATE_KEY exists: ${!!process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE
     };
     
     // Initialize the app with a unique name to avoid conflicts
-    const appName = `admin-${uniqueId}-${Date.now()}`;
+    const appName = `${uniqueId}-app-${Date.now()}`;
+    console.log(`Initializing Firebase Admin with app name: ${appName}`);
     
-    // Create the app with explicit credential object instead of using JSON
-    // This avoids JSON parsing issues in serverless environments
+    // Create the app with explicit credential object
     const app = admin.initializeApp({
       credential: admin.credential.cert(credentials),
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -70,16 +73,18 @@ PRIVATE_KEY exists: ${!!process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE
     // Store the app for future use
     FIREBASE_ADMIN_APPS[uniqueId] = app;
     
-    // Initialize and return auth and db
+    // Initialize Auth
     const auth = admin.auth(app);
-    const db = admin.firestore(app);
     
-    // Configure Firestore to handle undefined values
+    // Initialize Firestore with settings to prefer REST API over gRPC
+    // This helps avoid the OpenSSL decoder issues in serverless environments
+    const db = admin.firestore(app);
     db.settings({
-      ignoreUndefinedProperties: true
+      ignoreUndefinedProperties: true,
+      preferRest: true // Use REST API instead of gRPC
     });
     
-    console.log('Firebase Admin initialized successfully');
+    console.log(`Firebase Admin initialized successfully in ${uniqueId}`);
     
     return { app, auth, db };
   } catch (error) {
