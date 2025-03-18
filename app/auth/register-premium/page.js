@@ -35,7 +35,7 @@ function RegisterPremiumContent() {
     
     // Redirect if already logged in
     if (user) {
-      router.push('/dashboard');
+      router.push('/');
     }
   }, [searchParams, user, router]);
   
@@ -162,15 +162,15 @@ function RegisterPremiumContent() {
         return;
       }
       
-      console.log('Registration successful, redirecting to dashboard');
+      console.log('Registration successful, redirecting to home page');
       
-      // Redirect to dashboard or sign-in page based on result
+      // Redirect to home page or sign-in page based on result
       if (result.message) {
         // If we have a message, show it to the user on the sign-in page
         router.push(`/auth/signin?message=${encodeURIComponent(result.message)}&email=${encodeURIComponent(email)}`);
       } else {
-        // Otherwise go straight to dashboard
-        router.push('/dashboard');
+        // Otherwise go straight to home page
+        router.push('/');
       }
     } catch (error) {
       console.error('Registration error:', error);

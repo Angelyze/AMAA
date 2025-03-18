@@ -150,8 +150,9 @@ async function handleSubscriptionUpdate(event, db, auth) {
     const subscription = event.data.object;
     const customerId = subscription.customer;
     const status = subscription.status;
+    const cancelAtPeriodEnd = subscription.cancel_at_period_end;
     
-    console.log(`Processing subscription update for customer ${customerId}, status: ${status}`);
+    console.log(`Processing subscription update for customer ${customerId}, status: ${status}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
     
     // Get customer email from subscription
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -163,7 +164,17 @@ async function handleSubscriptionUpdate(event, db, auth) {
     }
     
     // Update premium status based on subscription status
+    // A subscription is considered active if its status is 'active' or 'trialing'
+    // If cancel_at_period_end is true, the subscription will be canceled at the period end
+    // but the status will still be 'active' until then
     const isPremium = ['active', 'trialing'].includes(status);
+    
+    // If the subscription is canceled at period end, we might want to notify the user
+    if (cancelAtPeriodEnd) {
+      console.log(`Subscription for ${customerEmail} is scheduled to be canceled at period end`);
+      // You might want to store this information or notify the user
+      // This is optional - isPremium will still be true until the period ends
+    }
     
     await updatePremiumStatus(db, auth, {
       email: customerEmail,
@@ -171,10 +182,11 @@ async function handleSubscriptionUpdate(event, db, auth) {
       subscriptionStatus: status,
       subscriptionId: subscription.id,
       customerId,
+      cancelAtPeriodEnd,
       source: 'subscription_update',
     });
     
-    console.log(`Subscription updated for ${customerEmail}, isPremium: ${isPremium}`);
+    console.log(`Subscription updated for ${customerEmail}, isPremium: ${isPremium}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
   } catch (error) {
     console.error('Error processing subscription update:', error);
     throw error;
@@ -309,7 +321,8 @@ async function updatePremiumStatus(db, auth, {
   subscriptionId,
   customerId,
   sessionId,
-  source
+  source,
+  cancelAtPeriodEnd
 }) {
   try {
     // Normalize email and create safe document ID
@@ -335,6 +348,7 @@ async function updatePremiumStatus(db, auth, {
     if (subscriptionId) data.subscriptionId = subscriptionId;
     if (customerId) data.customerId = customerId;
     if (sessionId) data.sessionId = sessionId;
+    if (cancelAtPeriodEnd !== undefined) data.cancelAtPeriodEnd = cancelAtPeriodEnd;
     data.source = source || 'webhook';
     
     // Update or create document in paid_emails collection
@@ -353,6 +367,7 @@ async function updatePremiumStatus(db, auth, {
         await auth.setCustomUserClaims(userRecord.uid, {
           isPremium,
           ...(isPremium ? { premiumSince: data.premiumSince } : {}),
+          ...(cancelAtPeriodEnd !== undefined ? { cancelAtPeriodEnd } : {}),
           updatedAt: timestamp
         });
         
@@ -360,6 +375,7 @@ async function updatePremiumStatus(db, auth, {
         const userData = {
           isPremium,
           ...(isPremium ? { premiumSince: data.premiumSince } : {}),
+          ...(cancelAtPeriodEnd !== undefined ? { cancelAtPeriodEnd } : {}),
           email: normalizedEmail,
           updatedAt: timestamp,
           lastPremiumUpdate: {

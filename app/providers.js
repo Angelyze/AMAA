@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, lazy } from 'react';
 import { FirebaseAuthProvider, useFirebaseAuth } from './providers/FirebaseAuthProvider';
 
 // Create auth context
@@ -19,10 +19,46 @@ export function useAuth() {
 export function AppProvider({ children }) {
   return (
     <FirebaseAuthProvider>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <AppContent>{children}</AppContent>
+      </AuthProvider>
     </FirebaseAuthProvider>
   );
 }
+
+// AppContent wraps the application with common UI elements like banners
+function AppContent({ children }) {
+  const [hydrated, setHydrated] = useState(false);
+  
+  // Wait until after client-side hydration to show
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+  
+  if (!hydrated) {
+    // Return a placeholder with the same structure to avoid layout shift
+    return <>{children}</>;
+  }
+  
+  return (
+    <>
+      {/* Dynamic import of SubscriptionStatusBanner to avoid SSR issues */}
+      {hydrated && (
+        <React.Suspense fallback={null}>
+          <SubscriptionStatusBanner />
+        </React.Suspense>
+      )}
+      {children}
+    </>
+  );
+}
+
+// Dynamically import the SubscriptionStatusBanner to avoid SSR issues
+const SubscriptionStatusBanner = lazy(() => 
+  import('./components/SubscriptionStatusBanner').catch(() => ({
+    default: () => null // Fallback to empty component if import fails
+  }))
+);
 
 export function AuthProvider({ children }) {
   const firebaseAuth = useFirebaseAuth();
