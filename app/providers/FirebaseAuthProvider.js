@@ -176,28 +176,65 @@ export function FirebaseAuthProvider({ children }) {
         if (firebaseUser) {
           console.log(`User authenticated: ${firebaseUser.email}`);
           
-          // Get the ID token with claims
-          const idTokenResult = await firebaseUser.getIdTokenResult(true);
+          // Step 1: First get Firestore data which is our source of truth
+          let firestoreData = null;
+          let isPremium = false;
           
-          // Check for premium status in custom claims
-          const isPremium = idTokenResult.claims.isPremium === true;
-          const premiumSince = idTokenResult.claims.premiumSince || null;
+          try {
+            // Get user document from Firestore
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            
+            if (userDoc.exists()) {
+              // Firestore record exists
+              firestoreData = userDoc.data();
+              console.log(`Firestore data found for ${firebaseUser.email}:`, firestoreData);
+              
+              // Check premium status in Firestore first (source of truth)
+              isPremium = firestoreData.isPremium === true;
+              console.log(`Premium status from Firestore for ${firebaseUser.email}: ${isPremium}`);
+            } else {
+              console.log(`No Firestore record found for ${firebaseUser.email}. Will create one via sync.`);
+            }
+            
+            // If not premium in Firestore, check paid_emails as fallback
+            if (!isPremium) {
+              const emailKey = firebaseUser.email.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
+              const paidEmailDoc = await getDoc(doc(db, 'paid_emails', emailKey));
+              
+              if (paidEmailDoc.exists()) {
+                const paidData = paidEmailDoc.data();
+                isPremium = paidData.isPremium === true;
+                console.log(`Premium status from paid_emails for ${firebaseUser.email}: ${isPremium}`);
+              }
+            }
+          } catch (firestoreError) {
+            console.error('Error getting Firestore data:', firestoreError);
+            // Continue with auth data only
+          }
           
-          console.log(`User ${firebaseUser.email} premium status from claims: ${isPremium}`);
-          
-          // Create user object with premium status from claims
-          const userWithPremium = {
+          // Step 2: Create merged user object with premium status
+          const mergedUser = {
             ...firebaseUser,
             isPremium: isPremium,
-            premiumSince: premiumSince
+            // Use Firestore data if available, otherwise set defaults
+            displayName: firestoreData?.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0],
+            photoURL: firestoreData?.photoURL || firebaseUser.photoURL || '/profile-placeholder.png',
+            premiumSince: firestoreData?.premiumSince || null
           };
           
-          // Try to sync with Firestore for backward compatibility
-          // But claims are the source of truth
-          const syncedUser = await syncUserWithFirestore(userWithPremium);
+          // Step 3: Sync with Firestore if needed
+          const syncedUser = await syncUserWithFirestore(mergedUser);
           
-          // Set the user with the merged data
+          // Step 4: Set the user in state
           setUser(syncedUser);
+          
+          // Step 5: Update the UI immediately while token refreshes in background
+          // Force a token refresh in the background to ensure claims are up-to-date
+          try {
+            firebaseUser.getIdToken(true);
+          } catch (tokenError) {
+            console.error('Error refreshing token:', tokenError);
+          }
         } else {
           console.log('No authenticated user');
           setUser(null);
@@ -233,14 +270,55 @@ export function FirebaseAuthProvider({ children }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Sign in successful with auth');
       
+      // Check if this user has premium access
+      let isPremium = false;
+      let premiumSince = null;
+      
+      try {
+        // 1. Check users collection first
+        const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          isPremium = userData.isPremium === true;
+          premiumSince = userData.premiumSince || null;
+          console.log(`Premium status from users collection: ${isPremium}`);
+        }
+        
+        // 2. If not premium, check paid_emails collection as fallback
+        if (!isPremium) {
+          const emailKey = email.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
+          const paidEmailDoc = await getDoc(doc(db, 'paid_emails', emailKey));
+          
+          if (paidEmailDoc.exists()) {
+            const paidData = paidEmailDoc.data();
+            isPremium = paidData.isPremium === true;
+            premiumSince = paidData.premiumSince || null;
+            console.log(`Premium status from paid_emails collection: ${isPremium}`);
+            
+            // Update users collection if needed
+            if (isPremium) {
+              await setDoc(doc(db, 'users', userCredential.user.uid), {
+                isPremium: true,
+                premiumSince: premiumSince || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+            }
+          }
+        }
+      } catch (premiumCheckError) {
+        console.error('Error checking premium status:', premiumCheckError);
+        // Continue without stopping login
+      }
+      
       // Create a user object with basic fields
       const basicUser = {
         uid: userCredential.user.uid,
         email: userCredential.user.email,
         displayName: userCredential.user.displayName || userCredential.user.email.split('@')[0],
         photoURL: userCredential.user.photoURL || '/profile-placeholder.png',
-        // Default to true for now to ensure UI works
-        isPremium: true
+        isPremium: isPremium,
+        premiumSince: premiumSince
       };
       
       // Update user state with basic info
@@ -249,7 +327,8 @@ export function FirebaseAuthProvider({ children }) {
       
       return { 
         success: true, 
-        user: basicUser 
+        user: basicUser,
+        isPremium: isPremium
       };
     } catch (error) {
       console.error('Sign-in error:', error);
