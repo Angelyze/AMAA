@@ -13,463 +13,417 @@ export const runtime = 'nodejs'; // Changed from 'edge' to 'nodejs'
  * It's designed to be resilient, always returning 200 to Stripe while handling errors internally.
  */
 export async function POST(request) {
-  // Store payload for debugging if needed
+  // Initialize variables
   let payload;
-  let eventType = 'unknown';
+  let eventType;
   
   try {
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    const body = await request.text();
-    const signature = request.headers.get("stripe-signature");
+    // Initialize Firebase with an identifier specific to this webhook
+    console.log('Webhook received - initializing Firebase Admin');
+    const { db, auth } = initializeFirebaseAdmin('stripe-webhook');
     
-    // Store the raw payload for error reporting
-    payload = body.substring(0, 1000); // First 1000 chars for debugging
+    if (!db || !auth) {
+      console.error('Firebase initialization failed in Stripe webhook handler');
+      
+      // Still return 200 to Stripe, but log the error
+      await logErrorToConsole('firebase_init_failed', 'Firebase initialization failed in webhook handler');
+      
+      // We'll still try to process the event, but we'll skip Firebase operations
+      return NextResponse.json({ received: true, warning: 'Internal service partially unavailable' });
+    }
+    
+    // Get the Stripe signature from headers
+    const signature = request.headers.get('stripe-signature');
     
     if (!signature) {
-      console.error('Missing Stripe signature in webhook request');
-      return NextResponse.json({ error: "Missing Stripe signature" }, { status: 400 });
+      console.error('Webhook Error: No Stripe signature included');
+      return NextResponse.json({ received: false, error: 'No signature' }, { status: 400 });
     }
     
-    // Verify the webhook signature
+    // Get the raw request body
+    payload = await request.text();
+    
+    // Verify the event using the Stripe SDK
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    
     let event;
     try {
-      event = stripe.webhooks.constructEvent(
-        body,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-      eventType = event.type;
-    } catch (error) {
-      console.error("Webhook signature verification failed:", error.message);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch (err) {
+      console.error(`Webhook signature verification failed.`, err);
+      return NextResponse.json({ received: false, error: 'Invalid signature' }, { status: 400 });
     }
     
-    console.log(`Webhook received: ${event.type} (id: ${event.id})`);
+    // Extract the event type
+    eventType = event.type;
+    console.log(`Stripe webhook received: ${eventType}`);
     
-    // Process the event - each handler manages its own errors and writes to database
-    try {
-      switch (event.type) {
-        case "checkout.session.completed":
-          await handleCheckoutCompleted(event.data.object, stripe);
-          break;
-          
-        case "customer.subscription.created":
-        case "customer.subscription.updated":
-          await handleSubscriptionUpdate(event.data.object, stripe);
-          break;
-          
-        case "customer.subscription.deleted":
-          await handleSubscriptionDeleted(event.data.object, stripe);
-          break;
-          
-        case "invoice.payment_succeeded":
-          await handleInvoicePaymentSucceeded(event.data.object, stripe);
-          break;
-          
-        case "invoice.payment_failed":
-          await handleInvoicePaymentFailed(event.data.object, stripe);
-          break;
-          
-        default:
-          console.log(`Unhandled event type: ${event.type}`);
-      }
-      
-      // Always acknowledge receipt of the event to Stripe
-      return NextResponse.json({ 
-        received: true, 
-        type: event.type,
-        id: event.id
-      });
-      
-    } catch (eventError) {
-      // Log error but return 200 to Stripe to prevent retries
-      console.error(`Error processing ${event.type} (id: ${event.id}):`, eventError);
-      
-      // Try to store the error in Firestore for debugging
-      try {
-        const { db } = initializeFirebaseAdmin('stripe-webhook-error');
-        if (db) {
-          await db.collection('webhook_errors').add({
-            stripeEventId: event.id,
-            stripeEventType: event.type,
-            error: eventError.message,
-            stack: eventError.stack,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      } catch (dbError) {
-        console.error('Error storing webhook error:', dbError);
-      }
-      
-      // Return 200 anyway to acknowledge receipt
-      return NextResponse.json({ 
-        received: true, 
-        warning: "Event processing had errors but was acknowledged",
-        type: event.type,
-        id: event.id 
-      });
+    // Process the event based on its type
+    switch (eventType) {
+      case 'checkout.session.completed':
+        await handleCheckoutCompleted(event, db, auth);
+        break;
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+        await handleSubscriptionUpdate(event, db, auth);
+        break;
+      case 'customer.subscription.deleted':
+        await handleSubscriptionDeleted(event, db, auth);
+        break;
+      case 'invoice.payment_succeeded':
+        await handleInvoicePaymentSucceeded(event, db, auth);
+        break;
+      case 'invoice.payment_failed':
+        await handleInvoicePaymentFailed(event, db, auth);
+        break;
+      default:
+        console.log(`Unhandled event type ${eventType}`);
     }
+    
+    // Return a 200 response to Stripe
+    return NextResponse.json({ received: true, type: eventType });
   } catch (error) {
-    // Critical error in webhook processing
-    console.error("Critical webhook error:", error);
+    // Log the error
+    console.error(`Error handling webhook: ${error.message}`);
+    console.error(error);
     
-    // Try to record the error
-    try {
-      const { db } = initializeFirebaseAdmin('stripe-webhook-critical');
-      if (db) {
-        await db.collection('webhook_errors').add({
-          error: error.message,
-          stack: error.stack,
-          payload: payload || 'unknown',
-          eventType: eventType || 'unknown',
-          timestamp: new Date().toISOString(),
-          isCritical: true
-        });
-      }
-    } catch (dbError) {
-      console.error('Error storing critical webhook error:', dbError);
-    }
+    // Extract a meaningful error message
+    const errorMessage = 
+      error.message || 
+      (error.code ? `Error code: ${error.code}` : 'Unknown error');
     
-    // Return 200 anyway - we don't want Stripe to retry as that won't help
-    return NextResponse.json({ 
-      received: true, 
-      critical_error: "Webhook processing failed but was acknowledged"
+    // Try to log the error to Firestore for debugging
+    await logErrorToConsole('webhook_error', errorMessage, { 
+      payload: payload,
+      eventType: eventType,
+      error: error.toString(),
+      stack: error.stack
+    });
+    
+    // We still return 200 to avoid Stripe retries (we'll handle errors internally)
+    return NextResponse.json({
+      received: true,
+      warning: 'Encountered an error during processing',
+      error: errorMessage
     });
   }
 }
 
 /**
- * Handle 'checkout.session.completed' event
- * 
- * This is triggered when a customer completes checkout
+ * Handle checkout.session.completed event
  */
-async function handleCheckoutCompleted(session, stripe) {
-  if (!session?.customer_email) {
-    console.log("No customer email in session");
-    return;
-  }
-  
-  const email = session.customer_email.toLowerCase();
-  console.log(`Checkout completed for ${email}`);
-  
-  // Log the premium status (for debugging and as a backup record)
-  console.log(`✅ PREMIUM USER: ${email} - checkout.session.completed`);
-
-  // A new user has become premium, update their status
+async function handleCheckoutCompleted(event, db, auth) {
   try {
-    const { db } = initializeFirebaseAdmin('stripe-checkout');
-    if (!db) {
-      throw new Error("Firebase DB initialization failed");
+    const session = event.data.object;
+    const customerEmail = session.customer_details.email;
+    
+    console.log(`Processing completed checkout for ${customerEmail}`);
+    
+    if (!customerEmail) {
+      throw new Error('No customer email found in checkout session');
     }
     
-    // Get subscription details if available
-    let subscriptionData = {};
-    if (session.subscription) {
-      try {
-        const subscription = await stripe.subscriptions.retrieve(session.subscription);
-        subscriptionData = {
-          subscriptionId: subscription.id,
-          subscriptionStatus: subscription.status,
-          subscriptionItems: subscription.items.data.map(item => ({
-            id: item.id,
-            price: item.price.id,
-            productId: item.price.product
-          }))
-        };
-      } catch (subError) {
-        console.error('Error retrieving subscription:', subError);
-        // Continue without subscription details
-      }
-    }
-    
-    // Update the user's premium status in Firestore
-    await updatePremiumStatus(email, true, {
-      source: 'stripe_checkout',
-      sessionId: session.id,
+    // Update premium status
+    await updatePremiumStatus(db, auth, {
+      email: customerEmail,
+      isPremium: true,
+      subscriptionStatus: 'active', 
+      subscriptionId: session.subscription,
       customerId: session.customer,
-      paymentStatus: session.payment_status,
-      ...subscriptionData
-    }, db);
-    
-  } catch (error) {
-    console.error("Error in handleCheckoutCompleted:", error);
-    // Re-throw to be handled by the main handler
-    throw error;
-  }
-}
-
-/**
- * Handle subscription update event
- */
-async function handleSubscriptionUpdate(subscription, stripe) {
-  try {
-    // Get customer email from Stripe
-    if (!subscription.customer) {
-      console.log("No customer in subscription");
-      return;
-    }
-    
-    // Get customer details to find email
-    const customerData = await stripe.customers.retrieve(subscription.customer);
-    const email = customerData.email?.toLowerCase();
-    
-    if (!email) {
-      console.log("No email found for customer:", subscription.customer);
-      return;
-    }
-    
-    const isPremium = subscription.status === 'active' || subscription.status === 'trialing';
-    console.log(`Subscription ${subscription.id} for ${email} is now ${subscription.status}`);
-    
-    // Log the subscription status
-    if (isPremium) {
-      console.log(`✅ PREMIUM USER: ${email} - subscription.${subscription.status}`);
-    } else {
-      console.log(`❌ NON-PREMIUM USER: ${email} - subscription.${subscription.status}`);
-    }
-    
-    // Update premium status in Firestore
-    const { db } = initializeFirebaseAdmin('stripe-subscription');
-    if (!db) {
-      throw new Error("Firebase DB initialization failed");
-    }
-    
-    await updatePremiumStatus(email, isPremium, {
-      source: 'stripe_subscription_update',
-      subscriptionId: subscription.id,
-      subscriptionStatus: subscription.status,
-      customerId: subscription.customer
-    }, db);
-    
-  } catch (error) {
-    console.error("Error in handleSubscriptionUpdate:", error);
-    throw error;
-  }
-}
-
-/**
- * Handle subscription deleted event
- */
-async function handleSubscriptionDeleted(subscription, stripe) {
-  try {
-    // Get customer email from Stripe
-    if (!subscription.customer) {
-      console.log("No customer in deleted subscription");
-      return;
-    }
-    
-    // Get customer details to find email
-    const customerData = await stripe.customers.retrieve(subscription.customer);
-    const email = customerData.email?.toLowerCase();
-    
-    if (!email) {
-      console.log("No email found for customer:", subscription.customer);
-      return;
-    }
-    
-    console.log(`Subscription ${subscription.id} for ${email} has been deleted`);
-    console.log(`❌ NON-PREMIUM USER: ${email} - subscription.deleted`);
-    
-    // Update premium status to false in Firestore
-    const { db } = initializeFirebaseAdmin('stripe-subscription-deleted');
-    if (!db) {
-      throw new Error("Firebase DB initialization failed");
-    }
-    
-    await updatePremiumStatus(email, false, {
-      source: 'stripe_subscription_deleted',
-      subscriptionId: subscription.id,
-      subscriptionStatus: 'deleted',
-      customerId: subscription.customer,
-      canceledAt: new Date().toISOString()
-    }, db);
-    
-  } catch (error) {
-    console.error("Error in handleSubscriptionDeleted:", error);
-    throw error;
-  }
-}
-
-/**
- * Handle invoice payment succeeded event
- */
-async function handleInvoicePaymentSucceeded(invoice, stripe) {
-  try {
-    // Get subscription from invoice
-    if (!invoice.subscription || !invoice.customer) {
-      console.log("No subscription or customer in invoice");
-      return;
-    }
-    
-    // Get customer details
-    const customerData = await stripe.customers.retrieve(invoice.customer);
-    const email = customerData.email?.toLowerCase();
-    
-    if (!email) {
-      console.log("No email found for customer:", invoice.customer);
-      return;
-    }
-    
-    console.log(`Invoice payment succeeded for ${email} (subscription: ${invoice.subscription})`);
-    console.log(`✅ PREMIUM USER: ${email} - invoice.payment_succeeded`);
-    
-    // Update premium status to true in Firestore
-    const { db } = initializeFirebaseAdmin('stripe-invoice-succeeded');
-    if (!db) {
-      throw new Error("Firebase DB initialization failed");
-    }
-    
-    await updatePremiumStatus(email, true, {
-      source: 'stripe_invoice_succeeded',
-      subscriptionId: invoice.subscription,
-      invoiceId: invoice.id,
-      customerId: invoice.customer
-    }, db);
-    
-  } catch (error) {
-    console.error("Error in handleInvoicePaymentSucceeded:", error);
-    throw error;
-  }
-}
-
-/**
- * Handle invoice payment failed event
- */
-async function handleInvoicePaymentFailed(invoice, stripe) {
-  try {
-    // Get subscription from invoice
-    if (!invoice.subscription || !invoice.customer) {
-      console.log("No subscription or customer in failed invoice");
-      return;
-    }
-    
-    // Get customer details
-    const customerData = await stripe.customers.retrieve(invoice.customer);
-    const email = customerData.email?.toLowerCase();
-    
-    if (!email) {
-      console.log("No email found for customer:", invoice.customer);
-      return;
-    }
-    
-    console.log(`Invoice payment failed for ${email} (subscription: ${invoice.subscription})`);
-    console.log(`⚠️ WARNING: Payment failed for ${email} - invoice.payment_failed`);
-    
-    // Don't update premium status yet - give the user time to fix their payment
-    // Just log the event for now
-    const { db } = initializeFirebaseAdmin('stripe-invoice-failed');
-    if (!db) {
-      throw new Error("Firebase DB initialization failed");
-    }
-    
-    // Record the payment failure in the database
-    await db.collection('payment_failures').add({
-      email: email,
-      customerId: invoice.customer,
-      subscriptionId: invoice.subscription,
-      invoiceId: invoice.id,
-      timestamp: new Date().toISOString(),
-      amount: invoice.amount_due,
-      currency: invoice.currency,
-      status: invoice.status,
-      attemptCount: invoice.attempt_count,
-      nextPaymentAttempt: invoice.next_payment_attempt
-        ? new Date(invoice.next_payment_attempt * 1000).toISOString()
-        : null
+      sessionId: session.id,
+      source: 'checkout',
     });
     
+    console.log(`Checkout completed for ${customerEmail}`);
   } catch (error) {
-    console.error("Error in handleInvoicePaymentFailed:", error);
+    console.error('Error processing checkout.session.completed:', error);
+    throw error; // Re-throw for central error handling
+  }
+}
+
+/**
+ * Handle subscription updates
+ */
+async function handleSubscriptionUpdate(event, db, auth) {
+  try {
+    const subscription = event.data.object;
+    const customerId = subscription.customer;
+    const status = subscription.status;
+    
+    console.log(`Processing subscription update for customer ${customerId}, status: ${status}`);
+    
+    // Get customer email from subscription
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const customer = await stripe.customers.retrieve(customerId);
+    const customerEmail = customer.email;
+    
+    if (!customerEmail) {
+      throw new Error('No customer email found');
+    }
+    
+    // Update premium status based on subscription status
+    const isPremium = ['active', 'trialing'].includes(status);
+    
+    await updatePremiumStatus(db, auth, {
+      email: customerEmail,
+      isPremium,
+      subscriptionStatus: status,
+      subscriptionId: subscription.id,
+      customerId,
+      source: 'subscription_update',
+    });
+    
+    console.log(`Subscription updated for ${customerEmail}, isPremium: ${isPremium}`);
+  } catch (error) {
+    console.error('Error processing subscription update:', error);
     throw error;
   }
 }
 
 /**
- * Update premium status for a user by email in database
+ * Handle subscription deletion
  */
-async function updatePremiumStatus(email, isPremium, metadata = {}, db) {
-  if (!email) {
-    console.error('Email is required for updatePremiumStatus');
-    return;
-  }
-
+async function handleSubscriptionDeleted(event, db, auth) {
   try {
-    // Create an email key for Firestore
-    const emailKey = email.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
+    const subscription = event.data.object;
+    const customerId = subscription.customer;
+    
+    console.log(`Processing subscription deletion for customer ${customerId}`);
+    
+    // Get customer email
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const customer = await stripe.customers.retrieve(customerId);
+    const customerEmail = customer.email;
+    
+    if (!customerEmail) {
+      throw new Error('No customer email found');
+    }
+    
+    // Update premium status to false
+    await updatePremiumStatus(db, auth, {
+      email: customerEmail,
+      isPremium: false,
+      subscriptionStatus: 'canceled',
+      subscriptionId: subscription.id,
+      customerId,
+      source: 'subscription_deleted',
+    });
+    
+    console.log(`Subscription deleted for ${customerEmail}`);
+  } catch (error) {
+    console.error('Error processing subscription deletion:', error);
+    throw error;
+  }
+}
+
+/**
+ * Handle successful invoice payment
+ */
+async function handleInvoicePaymentSucceeded(event, db, auth) {
+  try {
+    const invoice = event.data.object;
+    const customerId = invoice.customer;
+    const subscriptionId = invoice.subscription;
+    
+    console.log(`Processing successful payment for customer ${customerId}`);
+    
+    // Get customer email
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const customer = await stripe.customers.retrieve(customerId);
+    const customerEmail = customer.email;
+    
+    if (!customerEmail) {
+      throw new Error('No customer email found');
+    }
+    
+    // Update premium status
+    await updatePremiumStatus(db, auth, {
+      email: customerEmail,
+      isPremium: true,
+      subscriptionStatus: 'active',
+      subscriptionId,
+      customerId,
+      source: 'invoice_paid',
+    });
+    
+    console.log(`Payment succeeded for ${customerEmail}`);
+  } catch (error) {
+    console.error('Error processing invoice payment:', error);
+    throw error;
+  }
+}
+
+/**
+ * Handle failed invoice payment
+ */
+async function handleInvoicePaymentFailed(event, db, auth) {
+  try {
+    const invoice = event.data.object;
+    const customerId = invoice.customer;
+    const subscriptionId = invoice.subscription;
+    
+    console.log(`Processing failed payment for customer ${customerId}`);
+    
+    // Get customer email
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const customer = await stripe.customers.retrieve(customerId);
+    const customerEmail = customer.email;
+    
+    if (!customerEmail) {
+      throw new Error('No customer email found');
+    }
+    
+    // Not updating premium status yet, as they may pay later
+    // Just log the event for now
+    console.log(`Payment failed for ${customerEmail}`);
+    
+    // Store record of payment failure
+    if (db) {
+      try {
+        await db.collection('payment_failures').add({
+          email: customerEmail,
+          customerId,
+          subscriptionId,
+          invoiceId: invoice.id,
+          timestamp: new Date().toISOString(),
+          attempt: invoice.attempt_count,
+        });
+      } catch (error) {
+        console.error('Error storing payment failure record:', error);
+      }
+    }
+  } catch (error) {
+    console.error('Error processing invoice payment failure:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update premium status in Firestore and Firebase Auth
+ */
+async function updatePremiumStatus(db, auth, {
+  email,
+  isPremium,
+  subscriptionStatus,
+  subscriptionId,
+  customerId,
+  sessionId,
+  source
+}) {
+  try {
+    // Normalize email and create safe document ID
+    const normalizedEmail = email.toLowerCase();
+    const emailKey = normalizedEmail.replace(/[.#$\/\[\]]/g, '_');
     const timestamp = new Date().toISOString();
     
-    // Create the data object, filtering out undefined values
+    console.log(`Updating premium status for ${normalizedEmail} to ${isPremium}`);
+    
+    // Create data object, filtering out undefined values
     const data = {
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       isPremium,
-      updatedAt: timestamp,
-      // If becoming premium, set premiumSince if not already set
-      ...(isPremium ? { premiumSince: metadata.premiumSince || timestamp } : {}),
-      // Only add these fields if they're defined
-      ...(metadata.subscriptionStatus ? { subscriptionStatus: metadata.subscriptionStatus } : {}),
-      ...(metadata.subscriptionId ? { subscriptionId: metadata.subscriptionId } : {}),
-      ...(metadata.customerId ? { customerId: metadata.customerId } : {}),
-      ...(metadata.source ? { source: metadata.source || 'webhook' } : { source: 'webhook' }),
-      ...(metadata.sessionId ? { sessionId: metadata.sessionId } : {}),
-      lastWebhookAt: timestamp
+      updatedAt: timestamp
     };
     
-    // Update the paid_emails collection
-    await db.collection('paid_emails').doc(emailKey).set(data, { merge: true });
-    
-    console.log(`Updated premium status for ${email} to ${isPremium} in paid_emails`);
-    
-    // Try to update Firebase Auth user if they exist
-    try {
-      const { auth } = initializeFirebaseAdmin('premium-update');
-      
-      if (auth) {
-        const userRecord = await auth.getUserByEmail(email.toLowerCase())
-          .catch(() => null); // Catch "user not found" error
-        
-        if (userRecord) {
-          // Set custom claims for premium status
-          await auth.setCustomUserClaims(userRecord.uid, { 
-            isPremium,
-            updatedAt: timestamp,
-            ...(isPremium ? { premiumSince: metadata.premiumSince || timestamp } : {})
-          });
-          
-          console.log(`Updated Auth claims for ${email}`);
-          
-          // Also update the Firestore user document
-          try {
-            const userData = {
-              isPremium,
-              updatedAt: timestamp,
-              ...(isPremium ? { premiumSince: metadata.premiumSince || timestamp } : {}),
-              lastSubscriptionUpdate: {
-                timestamp,
-                source: metadata.source || 'webhook',
-                ...(metadata.subscriptionId ? { subscriptionId: metadata.subscriptionId } : {}),
-                ...(metadata.subscriptionStatus ? { subscriptionStatus: metadata.subscriptionStatus } : {})
-              }
-            };
-            
-            await db.collection('users').doc(userRecord.uid).update(userData);
-            
-            console.log(`Updated users collection for ${email}`);
-          } catch (userUpdateError) {
-            console.error(`Error updating users collection for ${email}:`, userUpdateError);
-            // Continue as Auth claims are the source of truth
-          }
-        } else {
-          console.log(`User ${email} not found in Auth. Premium status saved in paid_emails.`);
-        }
-      }
-    } catch (authError) {
-      console.error(`Error updating Auth claims for ${email}:`, authError);
-      // Continue as we've already updated Firestore
+    // Only add these fields if they are defined
+    if (isPremium) {
+      data.premiumSince = data.premiumSince || timestamp;
     }
     
-    return { success: true, email };
+    if (subscriptionStatus) data.subscriptionStatus = subscriptionStatus;
+    if (subscriptionId) data.subscriptionId = subscriptionId;
+    if (customerId) data.customerId = customerId;
+    if (sessionId) data.sessionId = sessionId;
+    data.source = source || 'webhook';
+    
+    // Update or create document in paid_emails collection
+    console.log(`Updating paid_emails record for ${normalizedEmail}`);
+    await db.collection('paid_emails').doc(emailKey).set(data, { merge: true });
+    
+    // Check if user exists in Firebase Auth and update their custom claims
+    try {
+      const userRecord = await auth.getUserByEmail(normalizedEmail)
+        .catch(() => null); // Ignore "user not found" error
+      
+      if (userRecord) {
+        console.log(`User found in Auth, updating custom claims for ${normalizedEmail}`);
+        
+        // Update custom claims
+        await auth.setCustomUserClaims(userRecord.uid, {
+          isPremium,
+          ...(isPremium ? { premiumSince: data.premiumSince } : {}),
+          updatedAt: timestamp
+        });
+        
+        // Also update user document in Firestore
+        const userData = {
+          isPremium,
+          ...(isPremium ? { premiumSince: data.premiumSince } : {}),
+          email: normalizedEmail,
+          updatedAt: timestamp,
+          lastPremiumUpdate: {
+            source: source || 'webhook',
+            timestamp
+          }
+        };
+        
+        await db.collection('users').doc(userRecord.uid).set(userData, { merge: true });
+        console.log(`Updated Firestore user document for ${normalizedEmail}`);
+      } else {
+        console.log(`No user account found for ${normalizedEmail} yet`);
+      }
+    } catch (authError) {
+      console.error(`Error updating Auth for ${normalizedEmail}:`, authError);
+      // We'll continue anyway, as the paid_emails record is the source of truth for unregistered users
+    }
+    
+    console.log(`Premium status updated for ${normalizedEmail}`);
   } catch (error) {
-    console.error(`Error in updatePremiumStatus for ${email}:`, error);
+    console.error(`Error updating premium status for ${email}:`, error);
+    
+    // Special handling for specific Firebase errors
+    if (error.code === 'app/no-app' || 
+        error.code === 'app/duplicate-app' ||
+        error.code?.includes('firestore')) {
+      
+      console.log('Detected Firebase-specific error, logging...');
+      await logErrorToConsole('firebase_error', error.message, {
+        email,
+        error: error.toString(),
+        stack: error.stack
+      });
+    }
+    
     throw error;
+  }
+}
+
+/**
+ * Log error to console with structured format
+ * This is a fallback method when Firestore is not available
+ */
+async function logErrorToConsole(errorType, errorMessage, additionalData = {}) {
+  try {
+    const errorLog = {
+      timestamp: new Date().toISOString(),
+      type: errorType,
+      message: errorMessage,
+      ...additionalData
+    };
+    
+    console.error('STRUCTURED_ERROR_LOG:', JSON.stringify(errorLog));
+    
+    // Try to log to Firestore if available
+    try {
+      const { db } = initializeFirebaseAdmin('error-logger');
+      if (db) {
+        await db.collection('webhook_errors').add(errorLog);
+      }
+    } catch (dbError) {
+      console.error('Failed to log error to Firestore:', dbError);
+    }
+  } catch (e) {
+    console.error('Error in error logger:', e);
   }
 }

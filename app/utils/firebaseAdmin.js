@@ -45,13 +45,21 @@ PRIVATE_KEY exists: ${!!process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE
     // Prepare credentials object with careful handling of the private key
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
     
+    // Remove surrounding quotation marks if present (common issue with Vercel env vars)
+    if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.slice(1, -1);
+      console.log('Removed surrounding quotes from private key');
+    }
+    
     // Fix for Vercel deployment - replace escaped newlines
     if (privateKey && !privateKey.includes('\n') && privateKey.includes('\\n')) {
       privateKey = privateKey.replace(/\\n/g, '\n');
+      console.log('Replaced escaped newlines in private key');
     }
     
-    // Log first few characters of the private key for debugging (don't log the entire key)
-    console.log(`Private key starts with: "${privateKey.substring(0, 20)} ...`);
+    // Log first few characters of the private key for debugging
+    console.log(`Private key starts with: "${privateKey.substring(0, 20)}..." and ends with "...${privateKey.substring(privateKey.length - 20)}"`);
+    console.log(`Private key length: ${privateKey.length}`);
     
     const credentials = {
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -89,6 +97,17 @@ PRIVATE_KEY exists: ${!!process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE
     return { app, auth, db };
   } catch (error) {
     console.error('Firebase Admin initialization error:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    
+    // Log the specific error if it's related to the private key
+    if (error.message && error.message.includes('private_key')) {
+      const privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
+      console.error(`Private key format issue. Key starts with: "${privateKey.substring(0, 15)}..."`);
+      console.error(`Key includes BEGIN marker: ${privateKey.includes('BEGIN PRIVATE KEY')}`);
+      console.error(`Key format: ${typeof privateKey}, length: ${privateKey.length}`);
+    }
+    
     return {};
   }
 }
