@@ -50,25 +50,32 @@ export async function GET(request) {
     const emailKey = email.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
     
     // Update the user's premium status directly
-    await db.collection('paid_emails').doc(emailKey).set({
-      email: email.toLowerCase(),
-      isPremium: true,
-      premiumSince: timestamp,
-      updatedAt: timestamp,
-      subscriptionStatus: 'active',
-      source: 'webhook_test',
-      testEventType: eventType,
-      isTest: true
-    }, { merge: true });
-    
-    // Log the test in a separate collection
-    await db.collection('webhook_tests').add({
-      email: email.toLowerCase(),
-      timestamp,
-      eventType,
-      userAgent: request.headers.get('user-agent'),
-      ip: request.headers.get('x-forwarded-for') || 'unknown'
-    });
+    try {
+      await db.collection('paid_emails').doc(emailKey).set({
+        email: email.toLowerCase(),
+        isPremium: true,
+        premiumSince: timestamp,
+        updatedAt: timestamp,
+        subscriptionStatus: 'active',
+        source: 'webhook_test',
+        testEventType: eventType,
+        isTest: true
+      }, { merge: true });
+      
+      // Log the test in a separate collection
+      await db.collection('webhook_tests').add({
+        email: email.toLowerCase(),
+        timestamp,
+        eventType,
+        userAgent: request.headers.get('user-agent'),
+        ip: request.headers.get('x-forwarded-for') || 'unknown'
+      });
+    } catch (dbError) {
+      console.error('Error writing to database:', dbError);
+      return NextResponse.json({ 
+        error: `Database write failed: ${dbError.message}` 
+      }, { status: 500 });
+    }
     
     // Return success
     return NextResponse.json({
@@ -113,57 +120,64 @@ export async function POST(request) {
     if (!db) {
       return NextResponse.json({ 
         error: 'Firebase initialization failed' 
-      }, { status: 500 });
+      }, { status: 503 });
     }
     
     // Update the user's premium status
     const timestamp = new Date().toISOString();
     const emailKey = email.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
     
-    await db.collection('paid_emails').doc(emailKey).set({
-      email: email.toLowerCase(),
-      isPremium,
-      ...(isPremium ? { premiumSince: timestamp } : {}),
-      updatedAt: timestamp,
-      subscriptionStatus: isPremium ? 'active' : 'canceled',
-      source: 'webhook_test_post',
-      testEventType: eventType,
-      isTest: true
-    }, { merge: true });
-    
-    // Try to update Firebase Auth user if they exist
     try {
-      const { auth } = initializeFirebaseAdmin('webhook-test-auth');
+      await db.collection('paid_emails').doc(emailKey).set({
+        email: email.toLowerCase(),
+        isPremium,
+        ...(isPremium ? { premiumSince: timestamp } : {}),
+        updatedAt: timestamp,
+        subscriptionStatus: isPremium ? 'active' : 'canceled',
+        source: 'webhook_test_post',
+        testEventType: eventType,
+        isTest: true
+      }, { merge: true });
       
-      if (auth) {
-        const userRecord = await auth.getUserByEmail(email.toLowerCase())
-          .catch(() => null);
+      // Try to update Firebase Auth user if they exist
+      try {
+        const { auth } = initializeFirebaseAdmin('webhook-test-auth');
         
-        if (userRecord) {
-          // Set custom claims for premium status
-          await auth.setCustomUserClaims(userRecord.uid, { 
-            isPremium,
-            updatedAt: timestamp,
-            ...(isPremium ? { premiumSince: timestamp } : {})
-          });
+        if (auth) {
+          const userRecord = await auth.getUserByEmail(email.toLowerCase())
+            .catch(() => null);
           
-          console.log(`Updated Auth claims for ${email} in webhook test`);
-          
-          // Also update the Firestore user document
-          try {
-            await db.collection('users').doc(userRecord.uid).update({
+          if (userRecord) {
+            // Set custom claims for premium status
+            await auth.setCustomUserClaims(userRecord.uid, { 
               isPremium,
               updatedAt: timestamp,
-              ...(isPremium ? { premiumSince: timestamp } : {}),
-              lastWebhookTest: timestamp
+              ...(isPremium ? { premiumSince: timestamp } : {})
             });
-          } catch (userUpdateError) {
-            console.error(`Error updating user document in webhook test:`, userUpdateError);
+            
+            console.log(`Updated Auth claims for ${email} in webhook test`);
+            
+            // Also update the Firestore user document
+            try {
+              await db.collection('users').doc(userRecord.uid).update({
+                isPremium,
+                updatedAt: timestamp,
+                ...(isPremium ? { premiumSince: timestamp } : {}),
+                lastWebhookTest: timestamp
+              });
+            } catch (userUpdateError) {
+              console.error(`Error updating user document in webhook test:`, userUpdateError);
+            }
           }
         }
+      } catch (authError) {
+        console.error('Error updating Auth in webhook test:', authError);
       }
-    } catch (authError) {
-      console.error('Error updating Auth in webhook test:', authError);
+    } catch (dbError) {
+      console.error('Error writing to database:', dbError);
+      return NextResponse.json({ 
+        error: `Database write failed: ${dbError.message}` 
+      }, { status: 500 });
     }
     
     // Return success

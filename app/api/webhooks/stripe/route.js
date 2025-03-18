@@ -398,23 +398,24 @@ async function updatePremiumStatus(email, isPremium, metadata = {}, db) {
     const emailKey = email.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
     const timestamp = new Date().toISOString();
     
-    // Update the paid_emails collection
-    await db.collection('paid_emails').doc(emailKey).set({
+    // Create the data object, filtering out undefined values
+    const data = {
       email: email.toLowerCase(),
       isPremium,
       updatedAt: timestamp,
       // If becoming premium, set premiumSince if not already set
-      ...(isPremium 
-        ? { premiumSince: metadata.premiumSince || timestamp } 
-        : {}),
-      // Additional metadata
-      subscriptionStatus: metadata.subscriptionStatus,
-      subscriptionId: metadata.subscriptionId,
-      customerId: metadata.customerId,
-      source: metadata.source || 'webhook',
-      sessionId: metadata.sessionId,
+      ...(isPremium ? { premiumSince: metadata.premiumSince || timestamp } : {}),
+      // Only add these fields if they're defined
+      ...(metadata.subscriptionStatus ? { subscriptionStatus: metadata.subscriptionStatus } : {}),
+      ...(metadata.subscriptionId ? { subscriptionId: metadata.subscriptionId } : {}),
+      ...(metadata.customerId ? { customerId: metadata.customerId } : {}),
+      ...(metadata.source ? { source: metadata.source || 'webhook' } : { source: 'webhook' }),
+      ...(metadata.sessionId ? { sessionId: metadata.sessionId } : {}),
       lastWebhookAt: timestamp
-    }, { merge: true });
+    };
+    
+    // Update the paid_emails collection
+    await db.collection('paid_emails').doc(emailKey).set(data, { merge: true });
     
     console.log(`Updated premium status for ${email} to ${isPremium} in paid_emails`);
     
@@ -438,17 +439,19 @@ async function updatePremiumStatus(email, isPremium, metadata = {}, db) {
           
           // Also update the Firestore user document
           try {
-            await db.collection('users').doc(userRecord.uid).update({
+            const userData = {
               isPremium,
               updatedAt: timestamp,
               ...(isPremium ? { premiumSince: metadata.premiumSince || timestamp } : {}),
               lastSubscriptionUpdate: {
                 timestamp,
-                source: metadata.source,
-                subscriptionId: metadata.subscriptionId,
-                subscriptionStatus: metadata.subscriptionStatus
+                source: metadata.source || 'webhook',
+                ...(metadata.subscriptionId ? { subscriptionId: metadata.subscriptionId } : {}),
+                ...(metadata.subscriptionStatus ? { subscriptionStatus: metadata.subscriptionStatus } : {})
               }
-            });
+            };
+            
+            await db.collection('users').doc(userRecord.uid).update(userData);
             
             console.log(`Updated users collection for ${email}`);
           } catch (userUpdateError) {
