@@ -28,6 +28,7 @@ export function FirebaseAuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [userClaims, setUserClaims] = useState(null);
 
   // Use the directly imported auth and db instances
   // No need for initialization via useMemo as they're already initialized in firebase.js
@@ -596,14 +597,111 @@ export function FirebaseAuthProvider({ children }) {
     }
   };
 
+  // After user authentication, in the loadUserData function or wherever premium status is checked
+  // Add a more forceful check of premium status that verifies with the server
+
+  async function refreshPremiumStatus(user) {
+    try {
+      if (!user || !user.email) return false;
+      
+      console.log(`Performing fresh premium status check for: ${user.email}`);
+      
+      // Make a direct API call to verify premium status
+      const response = await fetch('/api/verify-premium', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          email: user.email,
+          uid: user.uid,
+          refreshToken: await user.getIdToken(true) // Force refresh the token
+        }),
+      });
+      
+      if (!response.ok) {
+        console.warn(`Premium status check failed with status: ${response.status}`);
+        return false;
+      }
+      
+      const data = await response.json();
+      console.log(`Server premium status check result:`, data);
+      
+      return data.eligible === true;
+    } catch (error) {
+      console.error('Error refreshing premium status:', error);
+      return false;
+    }
+  }
+
+  // Update the onAuthStateChanged handler to include the premium check
+  useEffect(() => {
+    // Existing code...
+    
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Force a token refresh to get the latest custom claims
+          await firebaseUser.getIdToken(true);
+          
+          // Get fresh claims
+          const idTokenResult = await firebaseUser.getIdTokenResult();
+          const isPremium = idTokenResult.claims.isPremium === true;
+          
+          // Additional verification with server if needed
+          let verifiedPremium = isPremium;
+          
+          // If the user is marked as premium, double-check with the server
+          if (isPremium) {
+            verifiedPremium = await refreshPremiumStatus(firebaseUser);
+            
+            // If verification fails but token says premium, warn about potential issues
+            if (!verifiedPremium && isPremium) {
+              console.warn('Premium status mismatch: Token shows premium but server verification failed');
+            }
+          }
+          
+          // Set the premium status based on verification
+          const userData = {
+            ...firebaseUser,
+            isPremium: verifiedPremium,
+            // add any other user properties you need
+          };
+          
+          setUser(userData);
+          setUserClaims({
+            ...idTokenResult.claims,
+            isPremium: verifiedPremium
+          });
+          
+          setLoading(false);
+        } catch (error) {
+          console.error('Error setting up authenticated user:', error);
+          setUser(null);
+          setLoading(false);
+        }
+      } else {
+        setUser(null);
+        setUserClaims(null);
+        setLoading(false);
+      }
+    });
+    
+    return () => unsubscribe();
+    // Existing code...
+  }, []);
+
+  // Create the value object with all the properties and methods
   const value = {
     user,
+    userClaims,
     loading,
     error,
     signIn,
     signUp,
     signOut,
-    updatePremiumStatus
+    updatePremiumStatus,
+    refreshPremiumStatus
   };
 
   return (

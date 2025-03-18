@@ -29,11 +29,38 @@ export function AppProvider({ children }) {
 // AppContent wraps the application with common UI elements like banners
 function AppContent({ children }) {
   const [hydrated, setHydrated] = useState(false);
+  const { user, userClaims, refreshPremiumStatus } = useFirebaseAuth();
   
   // Wait until after client-side hydration to show
   useEffect(() => {
     setHydrated(true);
   }, []);
+  
+  // Regularly check premium status for logged-in users who have premium
+  useEffect(() => {
+    // Skip if not hydrated or no user
+    if (!hydrated || !user) return;
+    
+    // Check premium status immediately on load
+    if (user && userClaims?.isPremium) {
+      console.log('Performing regular premium status check...');
+      refreshPremiumStatus(user).catch(err => 
+        console.error('Error during scheduled premium check:', err)
+      );
+    }
+    
+    // Set up scheduled check every 10 minutes for premium users
+    const checkInterval = setInterval(() => {
+      if (user && userClaims?.isPremium) {
+        console.log('Running scheduled premium status verification...');
+        refreshPremiumStatus(user).catch(err => 
+          console.error('Error during scheduled premium check:', err)
+        );
+      }
+    }, 10 * 60 * 1000); // 10 minutes
+    
+    return () => clearInterval(checkInterval);
+  }, [hydrated, user, userClaims, refreshPremiumStatus]);
   
   if (!hydrated) {
     // Return a placeholder with the same structure to avoid layout shift

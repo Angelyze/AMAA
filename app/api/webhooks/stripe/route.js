@@ -152,7 +152,9 @@ async function handleSubscriptionUpdate(event, db, auth) {
     const status = subscription.status;
     const cancelAtPeriodEnd = subscription.cancel_at_period_end;
     
-    console.log(`Processing subscription update for customer ${customerId}, status: ${status}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
+    console.log(`Processing subscription update for customer ${customerId}`);
+    console.log(`Status: ${status}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
+    console.log('Subscription update details:', JSON.stringify(subscription, null, 2));
     
     // Get customer email from subscription
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -169,11 +171,48 @@ async function handleSubscriptionUpdate(event, db, auth) {
     // but the status will still be 'active' until then
     const isPremium = ['active', 'trialing'].includes(status);
     
-    // If the subscription is canceled at period end, we might want to notify the user
+    // If the subscription is canceled at period end, log this clearly
     if (cancelAtPeriodEnd) {
-      console.log(`Subscription for ${customerEmail} is scheduled to be canceled at period end`);
-      // You might want to store this information or notify the user
-      // This is optional - isPremium will still be true until the period ends
+      console.log(`SCHEDULED CANCELLATION: Subscription for ${customerEmail} is scheduled to be canceled at period end`);
+      console.log(`Current end date: ${new Date(subscription.current_period_end * 1000).toISOString()}`);
+      
+      // Check if this is a new cancellation (not previously marked as cancelAtPeriodEnd)
+      try {
+        const emailKey = customerEmail.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
+        const paidEmailDoc = await db.collection('paid_emails').doc(emailKey).get();
+        
+        if (paidEmailDoc.exists) {
+          const data = paidEmailDoc.data();
+          if (data.cancelAtPeriodEnd !== true) {
+            console.log(`First time marking subscription as cancelAtPeriodEnd for ${customerEmail}`);
+            
+            // This is a new cancellation, we might want to send an email or notification
+            // but we keep the premium status true until the period ends
+          }
+        }
+      } catch (checkError) {
+        console.error('Error checking existing cancelAtPeriodEnd status:', checkError);
+      }
+    }
+    
+    // Get details about the subscription for more context
+    let subscriptionPeriodEnd = null;
+    let subscriptionItems = null;
+    
+    try {
+      subscriptionPeriodEnd = subscription.current_period_end 
+        ? new Date(subscription.current_period_end * 1000).toISOString()
+        : null;
+      
+      if (subscription.items && subscription.items.data) {
+        subscriptionItems = subscription.items.data.map(item => ({
+          id: item.id,
+          price: item.price ? item.price.id : null,
+          product: item.price && item.price.product ? item.price.product : null
+        }));
+      }
+    } catch (detailsError) {
+      console.error('Error extracting subscription details:', detailsError);
     }
     
     await updatePremiumStatus(db, auth, {
@@ -183,6 +222,8 @@ async function handleSubscriptionUpdate(event, db, auth) {
       subscriptionId: subscription.id,
       customerId,
       cancelAtPeriodEnd,
+      subscriptionPeriodEnd,
+      subscriptionItems,
       source: 'subscription_update',
     });
     
@@ -202,6 +243,7 @@ async function handleSubscriptionDeleted(event, db, auth) {
     const customerId = subscription.customer;
     
     console.log(`Processing subscription deletion for customer ${customerId}`);
+    console.log('Subscription details:', JSON.stringify(subscription, null, 2));
     
     // Get customer email
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -212,17 +254,60 @@ async function handleSubscriptionDeleted(event, db, auth) {
       throw new Error('No customer email found');
     }
     
+    // Log important details for debugging
+    console.log(`SUBSCRIPTION CANCELLED for ${customerEmail}`);
+    console.log(`Status: ${subscription.status}`);
+    console.log(`Cancel reason: ${subscription.cancel_reason || 'Not specified'}`);
+    
     // Update premium status to false
     await updatePremiumStatus(db, auth, {
       email: customerEmail,
-      isPremium: false,
+      isPremium: false, // Always set to false for deletions/cancellations
       subscriptionStatus: 'canceled',
       subscriptionId: subscription.id,
       customerId,
       source: 'subscription_deleted',
+      // Set cancelAtPeriodEnd to false since this is a full cancellation/deletion
+      cancelAtPeriodEnd: false
     });
     
-    console.log(`Subscription deleted for ${customerEmail}`);
+    // Additional measures to ensure user premium status is revoked
+    try {
+      // Forcefully update the user document with non-premium status
+      const emailKey = customerEmail.toLowerCase().replace(/[.#$\/\[\]]/g, '_');
+      await db.collection('paid_emails').doc(emailKey).set({
+        isPremium: false,
+        subscriptionStatus: 'canceled',
+        updatedAt: new Date().toISOString(),
+        cancellationDate: new Date().toISOString(),
+        source: 'subscription_deleted_force',
+      }, { merge: true });
+      
+      console.log(`Forcefully updated paid_emails record for ${customerEmail} to non-premium status`);
+      
+      // Also try to find and update user in users collection
+      const usersQuery = await db.collection('users')
+        .where('email', '==', customerEmail.toLowerCase())
+        .limit(1)
+        .get();
+      
+      if (!usersQuery.empty) {
+        const userDoc = usersQuery.docs[0];
+        await userDoc.ref.set({
+          isPremium: false,
+          subscriptionStatus: 'canceled',
+          updatedAt: new Date().toISOString(),
+          cancellationDate: new Date().toISOString(),
+        }, { merge: true });
+        
+        console.log(`Forcefully updated users collection record for ${customerEmail} to non-premium status`);
+      }
+    } catch (forceUpdateError) {
+      console.error('Error during forced update of premium status:', forceUpdateError);
+      // Continue anyway as the main updatePremiumStatus should have worked
+    }
+    
+    console.log(`Subscription deleted for ${customerEmail} - premium access revoked`);
   } catch (error) {
     console.error('Error processing subscription deletion:', error);
     throw error;
@@ -322,7 +407,9 @@ async function updatePremiumStatus(db, auth, {
   customerId,
   sessionId,
   source,
-  cancelAtPeriodEnd
+  cancelAtPeriodEnd,
+  subscriptionPeriodEnd,
+  subscriptionItems
 }) {
   try {
     // Normalize email and create safe document ID
@@ -349,6 +436,8 @@ async function updatePremiumStatus(db, auth, {
     if (customerId) data.customerId = customerId;
     if (sessionId) data.sessionId = sessionId;
     if (cancelAtPeriodEnd !== undefined) data.cancelAtPeriodEnd = cancelAtPeriodEnd;
+    if (subscriptionPeriodEnd) data.subscriptionPeriodEnd = subscriptionPeriodEnd;
+    if (subscriptionItems) data.subscriptionItems = subscriptionItems;
     data.source = source || 'webhook';
     
     // Update or create document in paid_emails collection

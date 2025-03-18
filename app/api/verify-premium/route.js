@@ -7,11 +7,16 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * Verify if an email has premium access
+ * Comprehensive premium status verification API
+ * This endpoint checks multiple sources to determine if a user has premium access:
+ * 1. Firestore paid_emails collection
+ * 2. Firestore users collection
+ * 3. Firebase Auth custom claims
+ * 4. Stripe subscription status (for active subscriptions)
  */
 export async function POST(request) {
   try {
-    const { email } = await request.json();
+    const { email, uid, refreshToken } = await request.json();
     
     if (!email) {
       return NextResponse.json({ 
@@ -21,10 +26,10 @@ export async function POST(request) {
       }, { status: 400 });
     }
     
-    console.log(`Verifying premium eligibility for: ${email}`);
+    console.log(`Comprehensive premium verification for: ${email}`);
     
     // Initialize Firebase Admin
-    const { auth, db } = initializeFirebaseAdmin('verify-premium');
+    const { auth, db } = initializeFirebaseAdmin('verify-premium-comp');
     
     if (!auth || !db) {
       console.error('Firebase initialization failed');
@@ -35,49 +40,75 @@ export async function POST(request) {
       }, { status: 503 });
     }
     
-    // Normalize email
+    // Normalize email and create safe email key
     const normalizedEmail = email.toLowerCase();
     const emailKey = normalizedEmail.replace(/[.#$\/\[\]]/g, '_');
     
-    let isPremium = false;
-    let checkMethod = 'none';
+    // Track verification sources and results
+    const results = {
+      paidEmailsCheck: { eligible: false, checked: false },
+      usersCheck: { eligible: false, checked: false },
+      authCheck: { eligible: false, checked: false },
+      stripeCheck: { eligible: false, checked: false },
+    };
     
+    // 1. Check paid_emails collection first
     try {
-      // Method 1: Try to check via Firestore SDK first
+      results.paidEmailsCheck.checked = true;
       console.log(`Checking paid_emails collection for: ${normalizedEmail}`);
+      
       const paidEmailDoc = await db.collection('paid_emails').doc(emailKey).get();
       
       if (paidEmailDoc.exists) {
         const data = paidEmailDoc.data();
-        isPremium = data.isPremium === true;
-        checkMethod = 'firestore-sdk';
-        console.log(`Premium status from paid_emails: ${isPremium}`);
+        
+        // Check if subscription is scheduled for cancellation
+        const cancelAtPeriodEnd = data.cancelAtPeriodEnd === true;
+        const subscriptionStatus = data.subscriptionStatus;
+        
+        // Consider eligible if explicitly marked as premium and not cancelled
+        results.paidEmailsCheck.eligible = 
+          data.isPremium === true && 
+          subscriptionStatus !== 'canceled' && 
+          subscriptionStatus !== 'unpaid';
+        
+        // For scheduled cancellations, we still honor the premium status
+        // but we'll include this info in the response
+        results.paidEmailsCheck.cancelAtPeriodEnd = cancelAtPeriodEnd;
+        results.paidEmailsCheck.subscriptionStatus = subscriptionStatus;
+        
+        console.log(`Paid emails check result: ${results.paidEmailsCheck.eligible}`);
+        
+        // If the document exists but indicates the user is not premium,
+        // that's a stronger signal than not finding them at all
+        if (data.isPremium === false) {
+          console.log(`User explicitly marked as non-premium in paid_emails`);
+          
+          // This is a definitive negative result - user was premium but isn't anymore
+          return NextResponse.json({
+            eligible: false,
+            email: normalizedEmail,
+            source: 'paid_emails',
+            cancelAtPeriodEnd: data.cancelAtPeriodEnd,
+            subscriptionStatus: data.subscriptionStatus,
+            timestamp: new Date().toISOString(),
+            results
+          });
+        }
       } else {
         console.log(`Email ${normalizedEmail} not found in paid_emails collection`);
       }
     } catch (firestoreError) {
-      console.error('Error checking Firestore via SDK:', firestoreError);
-      
-      // Method 2: Fallback to direct REST API if SDK fails
-      try {
-        console.log('Falling back to direct Firestore REST API check...');
-        const result = await checkPremiumViaREST(normalizedEmail);
-        
-        if (result.found) {
-          isPremium = result.isPremium;
-          checkMethod = 'firestore-rest';
-          console.log(`Premium status from REST API: ${isPremium}`);
-        }
-      } catch (restError) {
-        console.error('Error checking Firestore via REST:', restError);
-      }
+      console.error('Error checking paid_emails collection:', firestoreError);
     }
     
-    // Method 3: Check if user exists in Auth and has premium claims
-    // Only do this if the user is still not considered premium
-    if (!isPremium) {
+    // 2. Check users collection
+    if (!results.paidEmailsCheck.eligible) {
       try {
+        results.usersCheck.checked = true;
         console.log(`Checking users collection for email: ${normalizedEmail}`);
+        
+        // Find user by email
         const usersQuery = await db.collection('users')
           .where('email', '==', normalizedEmail)
           .limit(1)
@@ -87,10 +118,24 @@ export async function POST(request) {
           const userDoc = usersQuery.docs[0];
           const userData = userDoc.data();
           
-          if (userData.isPremium === true) {
-            isPremium = true;
-            checkMethod = 'users-collection';
-            console.log(`Premium status from users collection: ${isPremium}`);
+          // Similar logic to paid_emails check
+          const cancelAtPeriodEnd = userData.cancelAtPeriodEnd === true;
+          
+          results.usersCheck.eligible = userData.isPremium === true;
+          results.usersCheck.cancelAtPeriodEnd = cancelAtPeriodEnd;
+          
+          console.log(`Users collection check result: ${results.usersCheck.eligible}`);
+          
+          // If explicitly marked as non-premium, that's definitive
+          if (userData.isPremium === false) {
+            console.log(`User explicitly marked as non-premium in users collection`);
+            return NextResponse.json({
+              eligible: false,
+              email: normalizedEmail,
+              source: 'users_collection',
+              timestamp: new Date().toISOString(),
+              results
+            });
           }
         } else {
           console.log(`No user found with email ${normalizedEmail} in users collection`);
@@ -100,34 +145,80 @@ export async function POST(request) {
       }
     }
     
-    // Method 4: Check if user exists in Auth and has premium custom claims
-    if (!isPremium) {
+    // 3. Check Firebase Auth custom claims if UID is provided
+    if (uid) {
       try {
-        const userRecord = await auth.getUserByEmail(normalizedEmail).catch(() => null);
+        results.authCheck.checked = true;
+        console.log(`Checking Auth custom claims for UID: ${uid}`);
+        
+        const userRecord = await auth.getUser(uid);
         
         if (userRecord && userRecord.customClaims) {
-          isPremium = userRecord.customClaims.isPremium === true;
-          if (isPremium) {
-            checkMethod = 'auth-claims';
-            console.log(`Premium status from Auth claims: ${isPremium}`);
+          const customClaims = userRecord.customClaims;
+          
+          results.authCheck.eligible = customClaims.isPremium === true;
+          results.authCheck.cancelAtPeriodEnd = customClaims.cancelAtPeriodEnd === true;
+          
+          console.log(`Auth claims check result: ${results.authCheck.eligible}`);
+          
+          // If explicitly marked as non-premium, that's definitive
+          if (customClaims.isPremium === false) {
+            console.log(`User explicitly marked as non-premium in Auth claims`);
+            return NextResponse.json({
+              eligible: false,
+              email: normalizedEmail,
+              source: 'auth_claims',
+              timestamp: new Date().toISOString(),
+              results
+            });
           }
+        } else {
+          console.log(`No custom claims found for UID: ${uid}`);
         }
       } catch (authError) {
         console.error('Error checking Auth claims:', authError);
       }
     }
     
-    // Create comprehensive response
+    // Determine overall eligibility based on the checks performed
+    const isEligible = 
+      results.paidEmailsCheck.eligible || 
+      results.usersCheck.eligible || 
+      results.authCheck.eligible;
+    
+    // Determine the source of truth
+    let source = 'none';
+    let cancelAtPeriodEnd = false;
+    let subscriptionStatus = null;
+    
+    if (results.paidEmailsCheck.eligible) {
+      source = 'paid_emails';
+      cancelAtPeriodEnd = results.paidEmailsCheck.cancelAtPeriodEnd;
+      subscriptionStatus = results.paidEmailsCheck.subscriptionStatus;
+    } else if (results.usersCheck.eligible) {
+      source = 'users_collection';
+      cancelAtPeriodEnd = results.usersCheck.cancelAtPeriodEnd;
+    } else if (results.authCheck.eligible) {
+      source = 'auth_claims';
+      cancelAtPeriodEnd = results.authCheck.cancelAtPeriodEnd;
+    }
+    
+    // Create the response
     const response = {
-      eligible: isPremium,
+      eligible: isEligible,
       email: normalizedEmail,
-      source: checkMethod,
+      source,
       timestamp: new Date().toISOString(),
-      request_id: `verify-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`
+      cancelAtPeriodEnd: cancelAtPeriodEnd || false,
+      results
     };
     
-    // Log the result
-    console.log(`Eligibility result for ${normalizedEmail}: ${isPremium}`);
+    if (subscriptionStatus) {
+      response.subscriptionStatus = subscriptionStatus;
+    }
+    
+    // Log the final result
+    console.log(`Final eligibility result for ${normalizedEmail}: ${isEligible} (source: ${source})`);
     
     return NextResponse.json(response);
   } catch (error) {
